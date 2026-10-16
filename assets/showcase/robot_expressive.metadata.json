@@ -1,0 +1,181 @@
+{
+  "file": "robot_expressive.glb",
+  "bytes": 463988,
+  "sha256": "047f5e5fb3bb6d378bd1df16ca6137f2a596c99b3a1b5690b4020c05aaf6f319",
+  "source": "https://github.com/mrdoob/three.js/blob/r186/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+  "sourceLicense": "CC0-1.0",
+  "author": "Tomás Laulhé (Quaternius)",
+  "modificationsAuthor": "Don McCurdy",
+  "copiedUnmodified": true,
+  "matchesUpstreamR186Bytes": true,
+  "boundsRestPoseWorld": {
+    "min": [
+      -1.998517304559397,
+      -0.020304421325820776,
+      -1.2691482746638536
+    ],
+    "max": [
+      2.280402933801527,
+      4.440918024942084,
+      2.021867977538766
+    ],
+    "size": [
+      4.278920238360923,
+      4.461222446267905,
+      3.2910162522026196
+    ]
+  },
+  "recommendedScaleForHeight1_85m": 0.41140241206818495,
+  "animations": [
+    {
+      "name": "Dance",
+      "durationSeconds": 3.333333,
+      "channels": 12
+    },
+    {
+      "name": "Death",
+      "durationSeconds": 0.958333,
+      "channels": 18
+    },
+    {
+      "name": "Idle",
+      "durationSeconds": 3.333333,
+      "channels": 7
+    },
+    {
+      "name": "Jump",
+      "durationSeconds": 0.708333,
+      "channels": 18
+    },
+    {
+      "name": "No",
+      "durationSeconds": 1.666667,
+      "channels": 7
+    },
+    {
+      "name": "Punch",
+      "durationSeconds": 0.833333,
+      "channels": 15
+    },
+    {
+      "name": "Running",
+      "durationSeconds": 0.958333,
+      "channels": 18
+    },
+    {
+      "name": "Sitting",
+      "durationSeconds": 0.416667,
+      "channels": 10
+    },
+    {
+      "name": "Standing",
+      "durationSeconds": 0.416667,
+      "channels": 10
+    },
+    {
+      "name": "ThumbsUp",
+      "durationSeconds": 1.583333,
+      "channels": 15
+    },
+    {
+      "name": "Walking",
+      "durationSeconds": 0.958333,
+      "channels": 20
+    },
+    {
+      "name": "WalkJump",
+      "durationSeconds": 0.833333,
+      "channels": 18
+    },
+    {
+      "name": "Wave",
+      "durationSeconds": 1.833333,
+      "channels": 18
+    },
+    {
+      "name": "Yes",
+      "durationSeconds": 1.666667,
+      "channels": 7
+    }
+  ],
+  "skinCount": 2,
+  "jointsPerSkin": [
+    43,
+    43
+  ],
+  "uniqueJoints": 43,
+  "morphTargets": [
+    "Angry",
+    "Surprised",
+    "Sad"
+  ],
+  "morphMesh": "Head",
+  "morphPrimitives": 3,
+  "meshes": 14,
+  "nodes": 74,
+  "materials": 3,
+  "vertices": 7214,
+  "triangles": 3237,
+  "textures": 0,
+  "notes": "Bounds include node transforms and skinning in authored rest pose, default morph weights; animation bounds may differ. No clips, bones, materials or bytes modified. Animation-start bounds sample the first animation keyframes (LINEAR/STEP), with default morph weights. They do not cover all animation frames.",
+  "boundsAtAnimationStart": {
+    "Idle": {
+      "min": [
+        -1.9985173045593922,
+        -0.020304421325820776,
+        -1.2817640128386512
+      ],
+      "max": [
+        2.280402933801532,
+        4.47650927186513,
+        2.02186797753877
+      ],
+      "size": [
+        4.278920238360924,
+        4.49681369319095,
+        3.303631990377421
+      ],
+      "scaleForHeight1_85m": 0.41140241206818495,
+      "translationYForBase0_32m": 0.32835328790909135
+    },
+    "Standing": {
+      "min": [
+        -1.9985170445056069,
+        -0.020304421325820776,
+        -1.94684498030338
+      ],
+      "max": [
+        2.2804036953625633,
+        3.9838567999544754,
+        1.414868256043942
+      ],
+      "size": [
+        4.27892073986817,
+        4.004161221280296,
+        3.361713236347322
+      ],
+      "scaleForHeight1_85m": 0.46201935880306,
+      "translationYForBase0_32m": 0.3293810357218229
+    },
+    "Walking": {
+      "min": [
+        -1.7664532648711224,
+        -0.07474602183465245,
+        -1.3115660859035327
+      ],
+      "max": [
+        2.4871019049950536,
+        4.344547599292788,
+        2.3547847390972736
+      ],
+      "size": [
+        4.253555169866176,
+        4.419293621127441,
+        3.6663508250008063
+      ],
+      "scaleForHeight1_85m": 0.41861893745997175,
+      "translationYForBase0_32m": 0.3512901002397821
+    }
+  },
+  "recommendedScaleBasis": "Idle animation first keyframe"
+}

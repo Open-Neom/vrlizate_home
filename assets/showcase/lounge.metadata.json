@@ -1,0 +1,86 @@
+{
+  "generator": "tool/generate_showcase_lounge.py",
+  "units": "metres",
+  "up": "+Y",
+  "forward": "+Z",
+  "origin": "assembly bounds centre on floor",
+  "chairFloorCenter": [
+    -0.22885675815650297,
+    0,
+    0.18295954649006188
+  ],
+  "objects": {
+    "LoungeChair": {
+      "vertices": 4219,
+      "triangles": 7680,
+      "primitives": 4,
+      "bounds": {
+        "min": [
+          -0.840745,
+          0,
+          -0.34904
+        ],
+        "max": [
+          0.383031,
+          1.08,
+          0.65296
+        ]
+      }
+    },
+    "SideTable": {
+      "vertices": 610,
+      "triangles": 832,
+      "primitives": 2,
+      "bounds": {
+        "min": [
+          -1.488857,
+          0.002,
+          0.08296
+        ],
+        "max": [
+          -0.948857,
+          0.54,
+          0.62296
+        ]
+      }
+    },
+    "PlanterAndPlant": {
+      "vertices": 6330,
+      "triangles": 9548,
+      "primitives": 7,
+      "bounds": {
+        "min": [
+          0.251348,
+          0,
+          -0.65296
+        ],
+        "max": [
+          1.488857,
+          1.784475,
+          0.459022
+        ]
+      }
+    }
+  },
+  "materials": 12,
+  "file": "lounge.glb",
+  "bytes": 586688,
+  "sha256": "6e96f2ee5973bc3d57a14d1284847d30d36cdba820a0f8f50af555e7f2c48674",
+  "bounds": {
+    "min": [
+      -1.488857,
+      0,
+      -0.65296
+    ],
+    "max": [
+      1.488857,
+      1.784475,
+      0.65296
+    ]
+  },
+  "triangles": 18060,
+  "vertices": 11159,
+  "textures": 0,
+  "animations": 0,
+  "skins": 0
+}

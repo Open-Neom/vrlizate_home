@@ -1,0 +1,31 @@
+name: vrlizate_home
+description: Themeable VRlizate entry, catalog and spatial lobby with host-owned experiences and services.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.8
+  flutter: '>=3.47.0'
+
+dependencies:
+  vrlizate_avatar: ^0.1.0
+  flutter:
+    sdk: flutter
+  flutter_scene: ^0.24.3
+  vrlizate: ^1.12.0
+  vrlizate_scene: ^0.5.0
+  vrlizate_widgets: ^0.3.1
+  vrlizate_joystick: ^0.2.0
+  vector_math: ^2.2.0
+  vrlizate_world: ^0.1.0
+  vrlizate_physics: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/showcase/

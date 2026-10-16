@@ -1,0 +1,20 @@
+# Workspace development. Applications select their own package sources.
+dependency_overrides:
+  vrlizate_avatar:
+    path: ../vrlizate_avatar
+  vrlizate_cast:
+    path: ../vrlizate_cast
+  vrlizate:
+    path: ../vrlizate
+  vrlizate_scene:
+    path: ../vrlizate_scene
+  vrlizate_widgets:
+    path: ../vrlizate_widgets
+  vrlizate_joystick:
+    path: ../vrlizate_joystick
+  vrlizate_world:
+    path: ../vrlizate_world
+  vrlizate_spatial_audio:
+    path: ../vrlizate_spatial_audio
+  vrlizate_physics:
+    path: ../vrlizate_physics

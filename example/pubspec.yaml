@@ -1,0 +1,54 @@
+name: vrlizate_home_example
+description: Independent host combining Home UI and VRLZ package discovery.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ^3.10.8
+  flutter: '>=3.47.0'
+dependencies:
+  vrlizate_avatar:
+    path: ../../vrlizate_avatar
+  flutter:
+    sdk: flutter
+  vrlizate_home:
+    path: ../
+  path_provider: 2.1.6
+  vrlizate_apps:
+    path: ../../vrlizate_apps
+  vrlizate:
+    path: ../../vrlizate
+    version: ^1.13.0
+  vrlizate_joystick:
+    path: ../../vrlizate_joystick
+  vrlizate_scene:
+    path: ../../vrlizate_scene
+  flutter_scene: ^0.24.3
+  vector_math: ^2.2.0
+dependency_overrides:
+  vrlizate_avatar:
+    path: ../../vrlizate_avatar
+  vrlizate_cast:
+    path: ../../vrlizate_cast
+  vrlizate_physics:
+    path: ../../vrlizate_physics
+  vrlizate_spatial_audio:
+    path: ../../vrlizate_spatial_audio
+  vrlizate_world:
+    path: ../../vrlizate_world
+  vrlizate:
+    path: ../../vrlizate
+  vrlizate_scene:
+    path: ../../vrlizate_scene
+  vrlizate_widgets:
+    path: ../../vrlizate_widgets
+  vrlizate_joystick:
+    path: ../../vrlizate_joystick
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  path_provider_platform_interface: ^2.1.2
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

@@ -1,0 +1,9 @@
+.dart_tool/
+.packages
+.flutter-plugins-dependencies
+build/
+example/.dart_tool/
+example/build/
+example/macos/Flutter/ephemeral/
+example/macos/Pods/
+*.iml
