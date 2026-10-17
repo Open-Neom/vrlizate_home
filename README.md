@@ -2,7 +2,7 @@
 
 Pantallas de entrada, catálogo 2D, biblioteca de paquetes y lobby espacial 3D para **VRlizate**.
 
-> Versión actual: **0.1.0**. Consulta [CHANGELOG.md](CHANGELOG.md) para el historial de cambios.
+> Versión actual: **1.0.0**. Consulta [CHANGELOG.md](CHANGELOG.md) para el historial de cambios.
 
 ## Arquitectura y responsabilidad
 
@@ -19,7 +19,7 @@ flowchart LR
 
 ## Superficies públicas
 
-- **`vrlizate_home.dart`:** pantalla de entrada (`VrHomeLanding`), catálogo 2D con búsqueda/filtros (`VrHomeCatalog`), biblioteca de paquetes (`VrHomePackageLibrary`) y temas (`Aurora`, `Día`, `Medianoche`) sin inicializar GPU.
+- **`vrlizate_home.dart`:** pantalla de entrada (`VrHomeLanding`), catálogo 2D con búsqueda/filtros (`VrHomeCatalog`), biblioteca de paquetes (`VrHomePackageLibrary`), temas (`Aurora`, `Día`, `Medianoche`), constantes de traducción (`VrHomeTranslationConstants`) y planos declarativos (`VrHomeRoomBlueprint`, `VrHomeMallBlueprint`, `VrHomeZoneKind`) sin inicializar GPU.
 - **`vrlizate_home_catalog.dart`:** modelos de inventario y categorías independientes de GPU.
 - **`vrlizate_home_spatial.dart`:** lobby espacial 3D (`VirtualHomeView`), plaza cubierta con ocho locales del ecosistema, biblioteca 3D, locomoción con colisión y giro progresivo en borde de stick, puntero láser/mirada y escenario de avatar (`HomeShowcase`).
 

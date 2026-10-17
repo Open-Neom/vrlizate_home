@@ -1,3 +1,10 @@
+## 1.0.0 - 2026-10-17
+
+- Promover `vrlizate_home` a la versión estable `1.0.0` bajo la estructura modular Open Neom (`lib/utils/constants/`, `lib/utils/enums/`, `lib/domain/models/`, `lib/ui/`).
+- Añadir `VrHomeConstants` y `VrHomeTranslationConstants`, extrayendo todos los textos e identificadores de interfaz en `VrHomeLanding`.
+- Añadir `VrHomeZoneKind` (`centralAtrium`, `arcadeHall`, `appGallery`, `worldPortalBay`, `relaxationSanctuary`, `customRoom`) para clasificar zonas arquitectónicas del lobby.
+- Añadir `VrHomeRoomBlueprint` y `VrHomeMallBlueprint` para configuración declarativa y validada de salas y plazas espaciales por desarrolladores.
+
 ## 0.1.0
 
 - Giro progresivo al mantener el joystick izquierdo en el borde: pasos iniciales

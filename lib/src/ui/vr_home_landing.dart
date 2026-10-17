@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../utils/constants/vr_home_constants.dart';
+import '../../utils/constants/vr_home_translation_constants.dart';
 import '../theme/vr_home_theme.dart';
 
 /// A presentation-only entry page. Navigation, pairing and device ownership
@@ -22,9 +24,7 @@ class VrHomeLanding extends StatelessWidget {
     this.onThemeChanged,
     this.onEcosystem,
     this.controllerInstructions =
-        '1. Conecta ambos a la misma red Wi-Fi.\n'
-        '2. Abre el visor en uno.\n'
-        '3. Elige mando en el otro y escanea el QR.',
+        VrHomeTranslationConstants.defaultControllerInstructions,
   });
 
   final VrHomeThemeData theme;
@@ -130,7 +130,7 @@ class VrHomeLanding extends StatelessWidget {
                                 const SizedBox(width: 9),
                                 Expanded(
                                   child: Text(
-                                    'VRlizate',
+                                    VrHomeTranslationConstants.brandTitle,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -154,7 +154,7 @@ class VrHomeLanding extends StatelessWidget {
                             ),
                             SizedBox(height: isTallPhone ? 10 : 6),
                             Text(
-                              'Tu espacio, a tu manera',
+                              VrHomeTranslationConstants.heroHeadline,
                               style: TextStyle(
                                 color: theme.foreground,
                                 fontSize: constraints.maxWidth < 500 ? 23 : 28,
@@ -166,10 +166,13 @@ class VrHomeLanding extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               onExplore == null
-                                  ? 'Entra con tu visor y descubre cada app en su habitación virtual.'
+                                  ? VrHomeTranslationConstants
+                                        .heroSubtitleVisorOnly
                                   : onController == null
-                                  ? 'Explora en tu teléfono o entra con un visor.'
-                                  : 'Elige una opción rápida: iniciar de golpe, visor con QR mutuo o joystick.',
+                                  ? VrHomeTranslationConstants
+                                        .heroSubtitleExploreAndVisor
+                                  : VrHomeTranslationConstants
+                                        .heroSubtitleAllModes,
                               style: TextStyle(
                                 color: theme.muted,
                                 fontSize: isTallPhone ? 13 : 11.5,
@@ -181,7 +184,9 @@ class VrHomeLanding extends StatelessWidget {
                               Semantics(
                                 liveRegion: true,
                                 child: Container(
-                                  key: const ValueKey('start_notice'),
+                                  key: const ValueKey(
+                                    VrHomeConstants.startNoticeKey,
+                                  ),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 12,
                                     vertical: 8,
@@ -227,7 +232,7 @@ class VrHomeLanding extends StatelessWidget {
                               const LinearProgressIndicator(minHeight: 2),
                               const SizedBox(height: 3),
                               Text(
-                                'Abriendo tu espacio…',
+                                VrHomeTranslationConstants.openingSpaceLabel,
                                 style: TextStyle(
                                   color: theme.muted,
                                   fontSize: 11.5,
@@ -242,13 +247,15 @@ class VrHomeLanding extends StatelessWidget {
                             final twoColumns =
                                 inner.maxWidth >= 320 && textScale <= 1.35;
                             final visorCard = _modeCard(
-                              key: const ValueKey('start_visor'),
+                              key: const ValueKey(
+                                VrHomeConstants.startVisorKey,
+                              ),
                               icon: Icons.view_in_ar_rounded,
-                              badge: 'VISOR · PEDIR QR',
-                              title: 'Usar como visor',
+                              badge: VrHomeTranslationConstants.visorBadge,
+                              title: VrHomeTranslationConstants.visorTitle,
                               description:
-                                  'Pide el QR al Joystick primero para sincronizar antes de entrar.',
-                              action: 'Entrar a VRlizate Home',
+                                  VrHomeTranslationConstants.visorDescription,
+                              action: VrHomeTranslationConstants.visorAction,
                               accent: theme.accent,
                               callback: onViewer,
                               minHeight: cardMinHeight,
@@ -257,13 +264,18 @@ class VrHomeLanding extends StatelessWidget {
                             final controllerCard = onController == null
                                 ? null
                                 : _modeCard(
-                                    key: const ValueKey('start_controller'),
+                                    key: const ValueKey(
+                                      VrHomeConstants.startControllerKey,
+                                    ),
                                     icon: Icons.sports_esports_rounded,
-                                    badge: 'JOYSTICK · MANDO VR',
-                                    title: 'Usar como mando',
-                                    description:
-                                        'Escanea el QR del visor o reconecta tu smartphone mando.',
-                                    action: 'Escanear QR / Conectar mando',
+                                    badge: VrHomeTranslationConstants
+                                        .controllerBadge,
+                                    title: VrHomeTranslationConstants
+                                        .controllerTitle,
+                                    description: VrHomeTranslationConstants
+                                        .controllerDescription,
+                                    action: VrHomeTranslationConstants
+                                        .controllerAction,
                                     accent: theme.secondary,
                                     callback: onController,
                                     minHeight: cardMinHeight,
@@ -349,7 +361,9 @@ class VrHomeLanding extends StatelessWidget {
                         if (onEcosystem != null) ...[
                           const SizedBox(height: 8),
                           OutlinedButton.icon(
-                            key: const ValueKey('start_ecosystem'),
+                            key: const ValueKey(
+                              VrHomeConstants.startEcosystemKey,
+                            ),
                             onPressed: busy ? null : onEcosystem,
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
@@ -359,7 +373,10 @@ class VrHomeLanding extends StatelessWidget {
                               Icons.meeting_room_outlined,
                               size: 16,
                             ),
-                            label: const Text('Entrar a mi casa'),
+                            label: const Text(
+                              VrHomeTranslationConstants
+                                  .enterEcosystemHomeAction,
+                            ),
                           ),
                         ],
                         if (hasSavedActions) ...[
@@ -370,7 +387,9 @@ class VrHomeLanding extends StatelessWidget {
                             children: [
                               if (onResumeController != null)
                                 OutlinedButton.icon(
-                                  key: const ValueKey('resume_controller'),
+                                  key: const ValueKey(
+                                    VrHomeConstants.resumeControllerKey,
+                                  ),
                                   onPressed: busy ? null : onResumeController,
                                   style: OutlinedButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
@@ -381,18 +400,26 @@ class VrHomeLanding extends StatelessWidget {
                                     Icons.history_rounded,
                                     size: 15,
                                   ),
-                                  label: const Text('Reanudar último mando'),
+                                  label: const Text(
+                                    VrHomeTranslationConstants
+                                        .resumeLastControllerAction,
+                                  ),
                                 ),
                               if (onForgetController != null)
                                 TextButton(
-                                  key: const ValueKey('forget_controller'),
+                                  key: const ValueKey(
+                                    VrHomeConstants.forgetControllerKey,
+                                  ),
                                   onPressed: busy ? null : onForgetController,
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
                                     tapTargetSize:
                                         MaterialTapTargetSize.shrinkWrap,
                                   ),
-                                  child: const Text('Olvidar vínculo'),
+                                  child: const Text(
+                                    VrHomeTranslationConstants
+                                        .forgetPairingAction,
+                                  ),
                                 ),
                             ],
                           ),
@@ -400,7 +427,9 @@ class VrHomeLanding extends StatelessWidget {
                         if (onController != null || footerAction != null) ...[
                           SizedBox(height: isTallPhone ? 12 : 8),
                           Container(
-                            key: const ValueKey('start_bottom_info_card'),
+                            key: const ValueKey(
+                              VrHomeConstants.startBottomInfoCardKey,
+                            ),
                             padding: EdgeInsets.symmetric(
                               horizontal: isTallPhone ? 14 : 10,
                               vertical: isTallPhone ? 12 : 8,
@@ -432,7 +461,8 @@ class VrHomeLanding extends StatelessWidget {
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
-                                          'Para usar dos teléfonos',
+                                          VrHomeTranslationConstants
+                                              .twoPhonesSectionTitle,
                                           style: TextStyle(
                                             color: theme.foreground,
                                             fontSize: isTallPhone ? 13.5 : 11.5,
@@ -512,7 +542,7 @@ class VrHomeLanding extends StatelessWidget {
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          'PORTÁTIL · 1 TELÉFONO',
+                          VrHomeTranslationConstants.handheldBadge,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -527,7 +557,7 @@ class VrHomeLanding extends StatelessWidget {
                   ),
                   SizedBox(height: spacious ? 10 : 4),
                   Text(
-                    'Iniciar de golpe',
+                    VrHomeTranslationConstants.handheldTitle,
                     style: TextStyle(
                       color: theme.foreground,
                       fontSize: spacious ? 17.5 : 14.5,
@@ -538,7 +568,7 @@ class VrHomeLanding extends StatelessWidget {
                   ),
                   SizedBox(height: spacious ? 6 : 3),
                   Text(
-                    'Modo consola portátil estilo Steam Deck en 1 smartphone sin visor.',
+                    VrHomeTranslationConstants.handheldDescription,
                     style: TextStyle(
                       color: theme.muted,
                       fontSize: spacious ? 12.5 : 10.5,
@@ -551,7 +581,7 @@ class VrHomeLanding extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  key: const ValueKey('start_phone_demos'),
+                  key: const ValueKey(VrHomeConstants.startPhoneDemosKey),
                   onPressed: busy ? null : onExplore,
                   style: FilledButton.styleFrom(
                     visualDensity: spacious
@@ -568,11 +598,11 @@ class VrHomeLanding extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Probar sin visor',
+                          VrHomeTranslationConstants.handheldAction,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontFamily: 'Roboto',
+                            fontFamily: VrHomeConstants.robotoFontFamily,
                             fontSize: spacious ? 13 : 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -599,7 +629,7 @@ class VrHomeLanding extends StatelessWidget {
   }) => ConstrainedBox(
     constraints: BoxConstraints(minHeight: minHeight),
     child: Container(
-      key: const ValueKey('start_settings_card'),
+      key: const ValueKey(VrHomeConstants.startSettingsCardKey),
       padding: EdgeInsets.all(spacious ? 15 : 10),
       decoration: BoxDecoration(
         color: theme.surface,
@@ -630,7 +660,7 @@ class VrHomeLanding extends StatelessWidget {
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      'AJUSTES · OPCIONES',
+                      VrHomeTranslationConstants.settingsBadge,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -645,7 +675,7 @@ class VrHomeLanding extends StatelessWidget {
               ),
               SizedBox(height: spacious ? 10 : 4),
               Text(
-                'Ajustes',
+                VrHomeTranslationConstants.settingsTitle,
                 style: TextStyle(
                   color: theme.foreground,
                   fontSize: spacious ? 17.5 : 14.5,
@@ -655,7 +685,7 @@ class VrHomeLanding extends StatelessWidget {
               ),
               SizedBox(height: spacious ? 5 : 2),
               Text(
-                'Cuenta y seguimiento físico.',
+                VrHomeTranslationConstants.settingsDescription,
                 style: TextStyle(
                   color: theme.muted,
                   fontSize: spacious ? 12.2 : 10.5,
