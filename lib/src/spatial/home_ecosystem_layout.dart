@@ -499,6 +499,153 @@ class HomeEcosystemLayout {
       // Static silhouettes share finish textures; no mirrors, transparent
       // glazing or per-frame animation are needed for room identity.
       switch (room.purpose) {
+        case VrHomeRoomPurpose.openSourceGames:
+          // An arcade/gallery, usable both as one catalog entrance and as a
+          // dedicated creator/game room. The host owns the real game content;
+          // these static forms never pretend that a runtime has been loaded.
+          // Both side displays leave the complete central terminal approach
+          // clear, including the authored 3.2 m doorway and panel width.
+          part(
+            'community_stage',
+            7.4,
+            .12,
+            -2.0,
+            3.4,
+            .24,
+            1.2,
+            HomeLobbyFinish.stone,
+            0xFF7D70AD,
+            HomeLobbyShape.beveledBox,
+          );
+          part(
+            'community_display_frame',
+            7.1,
+            2.65,
+            -2.78,
+            4.5,
+            2.15,
+            .18,
+            HomeLobbyFinish.oak,
+            0xFF413A5C,
+            HomeLobbyShape.beveledBox,
+          );
+          part(
+            'community_display',
+            7.1,
+            2.65,
+            -2.66,
+            4.1,
+            1.77,
+            .05,
+            HomeLobbyFinish.plaster,
+            0xFF99D8D3,
+            HomeLobbyShape.beveledBox,
+          );
+          // A controller sculpture provides a recognizable curved silhouette,
+          // even before the host's catalog panel becomes readable.
+          part(
+            'gamepad_body',
+            7.4,
+            .82,
+            -2.0,
+            1.55,
+            .56,
+            .58,
+            HomeLobbyFinish.fabric,
+            0xFF60527D,
+            HomeLobbyShape.ellipsoid,
+          );
+          for (final end in const [-1.0, 1.0]) {
+            part(
+              'gamepad_grip_$end',
+              7.4 + end * .53,
+              .67,
+              -1.96,
+              .49,
+              .65,
+              .58,
+              HomeLobbyFinish.fabric,
+              0xFF60527D,
+              HomeLobbyShape.ellipsoid,
+            );
+            part(
+              'gamepad_button_$end',
+              7.4 + end * .42,
+              1.09,
+              -1.98,
+              .16,
+              .08,
+              .16,
+              HomeLobbyFinish.trim,
+              end < 0 ? 0xFFCAF3EB : 0xFFB6A0FF,
+              HomeLobbyShape.cylinder,
+            );
+          }
+          for (var bay = 0; bay < 3; bay++) {
+            final x = 4.8 + bay * 1.85;
+            part(
+              'arcade_cabinet_$bay',
+              x,
+              .92,
+              2.15,
+              1.12,
+              1.84,
+              .88,
+              HomeLobbyFinish.oak,
+              0xFF413A5C,
+              HomeLobbyShape.beveledBox,
+            );
+            part(
+              'arcade_screen_$bay',
+              x,
+              1.37,
+              1.685,
+              .87,
+              .71,
+              .055,
+              HomeLobbyFinish.plaster,
+              bay.isEven ? 0xFFB7E6DD : 0xFFC2AEED,
+              HomeLobbyShape.beveledBox,
+            );
+            part(
+              'arcade_control_deck_$bay',
+              x,
+              .86,
+              1.6,
+              1.05,
+              .12,
+              .38,
+              HomeLobbyFinish.trim,
+              0xFF92CEC6,
+              HomeLobbyShape.beveledBox,
+            );
+            part(
+              'creator_marquee_$bay',
+              x,
+              2.03,
+              2.02,
+              1.22,
+              .24,
+              .48,
+              HomeLobbyFinish.trim,
+              null,
+              HomeLobbyShape.beveledBox,
+            );
+          }
+          for (final direction in const [-1.0, 1.0]) {
+            part(
+              'gallery_light_ribbon_$direction',
+              6.8,
+              4.35,
+              direction * 2.5,
+              5.8,
+              .07,
+              .16,
+              HomeLobbyFinish.trim,
+              direction < 0 ? 0xFFC6B4FA : 0xFFA3E2D6,
+              HomeLobbyShape.beveledBox,
+            );
+          }
         case VrHomeRoomPurpose.profile:
           part(
             'gallery_console',

@@ -9,9 +9,20 @@ enum VrHomeRoomPurpose {
   meditation,
   cinema,
   avatar,
+  openSourceGames,
 }
 
-enum VrHomeRoomIcon { person, forum, studio, book, music, spa, movie, avatar }
+enum VrHomeRoomIcon {
+  person,
+  forum,
+  studio,
+  book,
+  music,
+  spa,
+  movie,
+  avatar,
+  gamepad,
+}
 
 class VrHomeEcosystemRoom {
   const VrHomeEcosystemRoom({
@@ -27,6 +38,17 @@ class VrHomeEcosystemRoom {
   final int accent;
   final VrHomeRoomIcon icon;
   final VrHomeRoomPurpose purpose;
+
+  /// Opt-in gallery. The host supplies the game catalog, availability,
+  /// attribution links and launchers; this metadata does not install a runtime.
+  static const openSourceGames = VrHomeEcosystemRoom(
+    id: 'open_source_games',
+    title: 'Juegos Open Source',
+    description: 'Explora juegos de la comunidad y conoce a sus creadores.',
+    accent: 0xFFB6A0FF,
+    icon: VrHomeRoomIcon.gamepad,
+    purpose: VrHomeRoomPurpose.openSourceGames,
+  );
 
   static const defaults = <VrHomeEcosystemRoom>[
     VrHomeEcosystemRoom(

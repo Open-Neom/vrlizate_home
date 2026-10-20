@@ -9,6 +9,12 @@ class HomeRoomIdentity {
 
   static HomeRoomIdentity forPurpose(VrHomeRoomPurpose purpose) =>
       switch (purpose) {
+        VrHomeRoomPurpose.openSourceGames => const HomeRoomIdentity(
+          'JUEGOS Y CREADORES',
+          0xFFB6C4D0,
+          0xFFDAD6ED,
+          0xFF4C4368,
+        ),
         VrHomeRoomPurpose.avatar => const HomeRoomIdentity(
           'ESTUDIO DE AVATARES',
           0xFFABCAC5,

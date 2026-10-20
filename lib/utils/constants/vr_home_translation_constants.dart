@@ -41,4 +41,11 @@ abstract final class VrHomeTranslationConstants {
   static const String settingsBadge = 'AJUSTES · OPCIONES';
   static const String settingsTitle = 'Ajustes';
   static const String settingsDescription = 'Cuenta y seguimiento físico.';
+
+  static const String splashBadge = 'VRLIZATE · HOME ESPACIAL 3D';
+  static const String splashSyncingTitle =
+      'Sincronizando Joystick y abriendo Home VR…';
+  static const String splashLoadingTitle = 'Cargando entorno 3D del Home VR…';
+  static const String splashSubtitle =
+      'Preparando cámaras estereoscópicas, salas virtuales y controles espaciales';
 }

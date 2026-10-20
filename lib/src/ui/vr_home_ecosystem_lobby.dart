@@ -181,6 +181,7 @@ class _VrHomeEcosystemLobbyState extends State<VrHomeEcosystemLobby> {
   }
 
   static IconData _icon(VrHomeRoomIcon icon) => switch (icon) {
+    VrHomeRoomIcon.gamepad => Icons.sports_esports_outlined,
     VrHomeRoomIcon.avatar => Icons.accessibility_new_rounded,
     VrHomeRoomIcon.person => Icons.person_outline_rounded,
     VrHomeRoomIcon.forum => Icons.forum_outlined,

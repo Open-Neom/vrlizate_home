@@ -523,6 +523,7 @@ class _ExamplePackageLibraryState extends State<_ExamplePackageLibrary>
             VrlzPackageKind.builtin => 'Demo integrada',
             VrlzPackageKind.nes => 'Cartucho NES',
             VrlzPackageKind.retro => 'Juego retro 2.5D',
+            VrlzPackageKind.webgame => 'Juego web 3D',
             VrlzPackageKind.worlds => 'Mundos conectados',
             null => 'Paquete web por verificar',
           },

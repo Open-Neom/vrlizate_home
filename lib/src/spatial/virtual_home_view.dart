@@ -22,6 +22,7 @@ import 'virtual_home_world_builder.dart';
 import 'vr_demo_library_model.dart';
 import 'vr_demo_library_panel.dart';
 import 'vr_home_input_policy.dart';
+import 'vr_home_loading_splash_overlay.dart';
 import 'vr_home_spatial_bindings.dart';
 import 'vr_home_room_panel.dart';
 import '../ecosystem/vr_home_room_controller.dart';
@@ -273,6 +274,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   Node? _modalLaserTarget;
   bool _isDemoActive = false;
   bool _isEnteringDemo = false;
+  bool _routeVisible = true;
+  bool get _homeSurfaceActive => _routeVisible && !_isDemoActive;
   bool _modalNavigationLatched = false;
 
   bool _isRemoteConnected = false;
@@ -439,6 +442,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   }
 
   bool _pendingInitialPairing = false;
+  bool _isReturningFromPairing = false;
+  int _postPairingFrames = 0;
+  Timer? _pairingSplashTimer;
 
   void _onHandheldModeChanged() {
     if (!mounted) return;
@@ -455,9 +461,29 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (!oldWidget.openPairingOnStart && widget.openPairingOnStart) {
       _pendingInitialPairing = true;
     }
-    final hostChanged = !identical(oldWidget.bindings, widget.bindings);
+    final bindingsChanged = !identical(oldWidget.bindings, widget.bindings);
     final themeChanged = !identical(oldWidget.theme, widget.theme);
-    if (hostChanged) {
+    final coreHostChanged =
+        bindingsChanged &&
+        (!identical(
+              oldWidget.bindings.remoteController,
+              widget.bindings.remoteController,
+            ) ||
+            !identical(
+              oldWidget.bindings.assistantChanges,
+              widget.bindings.assistantChanges,
+            ) ||
+            !identical(
+              oldWidget.bindings.roomChanges,
+              widget.bindings.roomChanges,
+            ) ||
+            !identical(oldWidget.bindings.exhibits, widget.bindings.exhibits) ||
+            oldWidget.bindings.ecosystemRooms.length !=
+                widget.bindings.ecosystemRooms.length ||
+            oldWidget.bindings.worldObjects?.length !=
+                widget.bindings.worldObjects?.length);
+
+    if (coreHostChanged) {
       _assistantChanges?.removeListener(_assistantStateChanged);
       _assistantChanges = null;
       _dismissItzliPanel(
@@ -500,7 +526,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _bindHost(openPairing: _pendingInitialPairing);
       if (!_isDemoActive) _resumeHomeProducers();
     }
-    if (hostChanged || themeChanged) {
+    if (coreHostChanged || themeChanged) {
       _assistantPanelSnapshot = null;
       _assistantStateChanged();
       _worldBuilder.theme = widget.theme;
@@ -516,6 +542,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _hoveredPedestal = null;
       // Keep the same rig, view pose, page and manually placed library transform.
       // An old in-flight rasterization is invalidated before the replacement.
+      _buildLibrary();
+      if (_roomController.isOpen) _roomStateChanged();
+    } else if (bindingsChanged) {
       _buildLibrary();
       if (_roomController.isOpen) _roomStateChanged();
     }
@@ -921,9 +950,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     unawaited(
       (_bindings.ready ?? Future<void>.value())
           .then((_) {
-            if (mounted &&
-                generation == _hostGeneration &&
-                shouldOpenPairing) {
+            if (mounted && generation == _hostGeneration && shouldOpenPairing) {
               _pendingInitialPairing = false;
               _showPairing();
             }
@@ -944,11 +971,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       return;
     }
     setState(() => _isDemoActive = true);
+    var paired = false;
     try {
       _suspendHomeProducers();
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      final paired = await _bindings.onPair!(context);
+      paired = await _bindings.onPair!(context);
       if (mounted && paired && _remoteController.isConnected) {
         // The authenticated route result enters headset mode automatically.
         // A held during pairing must be released before opening anything.
@@ -963,7 +991,17 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       }
     } finally {
       if (mounted) {
-        setState(() => _isDemoActive = false);
+        _pairingSplashTimer?.cancel();
+        _postPairingFrames = 0;
+        setState(() {
+          _isDemoActive = false;
+          _isReturningFromPairing = true;
+        });
+        _pairingSplashTimer = Timer(const Duration(milliseconds: 700), () {
+          if (mounted && _isReturningFromPairing) {
+            setState(() => _isReturningFromPairing = false);
+          }
+        });
         _resumeHomeProducers();
       }
     }
@@ -1068,9 +1106,13 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_foreground ||
-        !TickerMode.valuesOf(context).enabled ||
-        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+    // A room callback can push a route without going through _enterDemo.
+    // Rebuild already follows this inherited dependency change: remove the
+    // live GPU surface while preserving Home's retained scene and camera rig.
+    _routeVisible =
+        TickerMode.valuesOf(context).enabled &&
+        (ModalRoute.isCurrentOf(context) ?? true);
+    if (!_foreground || !_routeVisible) {
       _suspendHomeProducers(rebuild: false);
     } else {
       _resumeHomeProducers();
@@ -1328,6 +1370,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
   @override
   void dispose() {
+    _pairingSplashTimer?.cancel();
     vrHandheldConsoleMode.removeListener(_onHandheldModeChanged);
     _avatarAppearance?.removeListener(_avatarAppearanceChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -1365,6 +1408,18 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         !TickerMode.valuesOf(context).enabled ||
         !(ModalRoute.of(context)?.isCurrent ?? true)) {
       return;
+    }
+    if (_isReturningFromPairing) {
+      _postPairingFrames++;
+      if (_postPairingFrames >= 4) {
+        _pairingSplashTimer?.cancel();
+        _pairingSplashTimer = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _isReturningFromPairing) {
+            setState(() => _isReturningFromPairing = false);
+          }
+        });
+      }
     }
     _rememberWalkablePosition();
     _time += dt;
@@ -2250,7 +2305,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             fit: StackFit.expand,
             children: [
               // 1. Stereoscopic 3D Spatial Scene with Head-Tracking and Dual Holographic Hands
-              if (!_isDemoActive)
+              if (_homeSurfaceActive)
                 StereoSceneView(
                   scene: _scene,
                   rig: _rig,
@@ -2290,12 +2345,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                 ),
 
               // 2. Single 2D preparation status, hidden while wearing the visor.
-              if (!_isDemoActive &&
+              if (_homeSurfaceActive &&
                   _hudHidden &&
                   _bindings.statusOverlayBuilder != null)
                 _bindings.statusOverlayBuilder!(context),
 
-              if (!_isDemoActive &&
+              if (_homeSurfaceActive &&
                   !_hudHidden &&
                   (!_hasWorldModal || !_worldModalReady))
                 VirtualHomeHudCoordinator.buildCenterSweetSpotHud(
@@ -2313,7 +2368,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                 ),
 
               // Monoscopic preparation with only the host-provided capabilities.
-              if (!_isDemoActive && !_hasWorldModal && !_hudHidden)
+              if (_homeSurfaceActive && !_hasWorldModal && !_hudHidden)
                 VirtualHomeHudCoordinator.buildTopQuickControls(
                   hidden: _hudHidden,
                   theme: widget.theme,
@@ -2356,6 +2411,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                   child: const ColoredBox(color: Color(0xFF060913)),
                 ),
               ),
+
+              if (_isReturningFromPairing)
+                VrHomeLoadingSplashOverlay(
+                  visible: _isReturningFromPairing,
+                  isSyncingController: _isRemoteConnected,
+                ),
             ],
           ),
         ),
@@ -2364,7 +2425,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     return Theme(
       data: widget.theme.materialTheme,
       child:
-          _bindings.wrapContent?.call(context, !_isDemoActive, content) ??
+          _bindings.wrapContent?.call(context, _homeSurfaceActive, content) ??
           content,
     );
   }

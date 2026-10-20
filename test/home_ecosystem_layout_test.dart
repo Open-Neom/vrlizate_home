@@ -20,7 +20,9 @@ void main() {
     ]);
     expect(
       VrHomeEcosystemRoom.defaults.map((r) => r.purpose).toSet(),
-      VrHomeRoomPurpose.values.toSet(),
+      VrHomeRoomPurpose.values
+          .where((purpose) => purpose != VrHomeRoomPurpose.openSourceGames)
+          .toSet(),
     );
     expect(() => VrHomeEcosystemRoom.defaults.clear(), throwsUnsupportedError);
   });
@@ -139,7 +141,7 @@ void main() {
           .map(HomeRoomIdentity.forPurpose)
           .map((identity) => identity.category)
           .toSet(),
-      hasLength(8),
+      hasLength(VrHomeRoomPurpose.values.length),
     );
     for (final portal in layout.portals) {
       final roomBoxes = layout.boxes
