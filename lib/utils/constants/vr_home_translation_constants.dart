@@ -48,4 +48,35 @@ abstract final class VrHomeTranslationConstants {
   static const String splashLoadingTitle = 'Cargando entorno 3D del Home VR…';
   static const String splashSubtitle =
       'Preparando cámaras estereoscópicas, salas virtuales y controles espaciales';
+
+  static const String portableWorldCategoryLabel = 'PORTAL DE MUNDO .VRLW';
+  static const String portableWorldEyebrow = 'PORTAL DE MUNDO .VRLW';
+  static const String portableWorldDefaultSubtitle =
+      'Mundo portátil .vrlw · Explora sus espacios y portales';
+  static const String portableWorldEnterActionLabel = 'Entrar al mundo .vrlw';
+
+  static const String mainMenuSummonedStatus =
+      'Menú principal y opciones frente a ti · Pulsa L para ocultar';
+  static const String mainMenuHiddenStatus =
+      'Menú principal oculto · Pulsa L o X/Y para invocarlo aquí';
+
+  static const String optionsDockLabel = 'Opciones';
+  static const String optionsOpenedStatus =
+      'Opciones espaciales abiertas · Mirada, A o láser · B: cerrar';
+  static const String optionsClosedStatus =
+      'Opciones cerradas · Continúa explorando el Mall';
+  static const String optionsPanelTitle = 'OPCIONES Y MENÚ RÁPIDO VR';
+  static const String optionsPanelSubtitle =
+      'AJUSTES ESPACIALES EN CUALQUIER LUGAR · B: CERRAR';
+  static const String optionsPanelDescription =
+      'Configura tu visor, ambiente, calidad y sensores sin salir de donde estás.';
+  static const String optionsLookPrefix = 'Ambiente: ';
+  static const String optionsQualityPrefix = 'Calidad: ';
+  static const String optionsRecenterLabel = 'Recentrar vista';
+  static const String optionsSpatialSensorsLabel = 'Sensores 3D';
+  static const String optionsCastLabel = 'Compartir vista';
+  static const String optionsPairLabel = 'Mando QR';
+  static const String optionsCalibrateLensesLabel = 'Calibrar lentes';
+  static const String optionsMallPlazaLabel = 'Ir a Plaza Mall';
+  static const String controllerMenuActionLabel = 'Menú / Opciones';
 }

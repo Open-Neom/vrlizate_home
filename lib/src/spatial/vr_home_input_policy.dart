@@ -5,7 +5,14 @@ import 'package:vrlizate_scene/vrlizate_scene.dart' show StereoHeadRig;
 import 'package:vrlizate_joystick/vrlizate_joystick.dart';
 import 'vr_phone_pointer_policy.dart';
 
-enum VrHomeGamepadAction { none, primary, back, previousCategory, nextCategory }
+enum VrHomeGamepadAction {
+  none,
+  primary,
+  back,
+  previousCategory,
+  nextCategory,
+  toggleMainMenu,
+}
 
 /// Empty-space taps may reveal preparation only when no world modal owns
 /// input. This also includes a modal whose GPU labels are still loading:
@@ -18,7 +25,7 @@ bool shouldRevealHomePreparationOnMiss({
 /// The reference driver encodes X/Y/L2 as `trigger` plus a button payload.
 /// Reserve these events before the scene interprets a generic primary action.
 class VrHomeGamepadPolicy {
-  final List<bool> _held = List.filled(3, false);
+  final List<bool> _held = List.filled(4, false);
 
   VrHomeGamepadAction handle(VrInputEvent event) {
     if (event.source != VrInputSource.gamepad || event.handled) {
@@ -42,19 +49,27 @@ class VrHomeGamepadPolicy {
         event.type == VrInputType.buttonY ||
         (event.type == VrInputType.trigger &&
             (button == VrGamepadButton.y || button == 'y'));
+    final isMenuToggle =
+        event.type == VrInputType.trigger &&
+        (button == 'l1' ||
+            button == 'r1' ||
+            button == 'start' ||
+            button == 'select' ||
+            button == 'menu');
     final isPrimary =
         event.type == VrInputType.trigger &&
         (button == null || button == VrGamepadButton.r2 || button == 'r2');
-    if (!isX && !isY && !isPrimary) {
+    if (!isX && !isY && !isMenuToggle && !isPrimary) {
       // L2/unknown secondary triggers must never open the focused demo.
       if (event.type == VrInputType.trigger) event.consume();
       return VrHomeGamepadAction.none;
     }
     event.consume();
-    final index = isX ? 0 : (isY ? 1 : 2);
+    final index = isX ? 0 : (isY ? 1 : (isMenuToggle ? 3 : 2));
     final pressed = event.active && !_held[index];
     _held[index] = event.active;
     if (!pressed) return VrHomeGamepadAction.none;
+    if (isMenuToggle) return VrHomeGamepadAction.toggleMainMenu;
     return isX
         ? VrHomeGamepadAction.previousCategory
         : (isY

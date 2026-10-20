@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:vrlizate_avatar/vrlizate_avatar.dart';
@@ -9,6 +10,8 @@ import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate_scene/vrlizate_scene.dart';
 import 'package:vrlizate/vrlizate.dart' show VrSpatialInputState;
 
+import '../../utils/constants/vr_home_constants.dart';
+import '../../utils/constants/vr_home_translation_constants.dart';
 import 'laser_pointer_node.dart';
 import 'demo_preview_data.dart';
 import 'home_spatial_metrics.dart';
@@ -205,6 +208,92 @@ Future<VrWorldActionPanel3D> createVrHomeAssistantPanel({
   );
 }
 
+/// Spatial 3D Options & Quick Menu panel summonable from anywhere in the Mall
+/// via the Joystick (`R` button or `Opciones` dock action).
+Future<VrWorldActionPanel3D> createVrHomeOptionsPanel({
+  required VrHomeSpatialBindings bindings,
+  required VrWorldPose pose,
+  required String lookName,
+  required VrQualityPreset qualityPreset,
+  required bool hasMallPortals,
+  required void Function(String actionId) onAction,
+  required VoidCallback onClose,
+  VrHomeThemeData theme = VrHomeThemeData.aurora,
+  VrControlMeshBuilder? meshBuilder,
+  VrWorldTextNodeBuilder? textNodeBuilder,
+}) {
+  final actions = <VrWorldAction>[
+    VrWorldAction(
+      id: VrHomeConstants.lookActionId,
+      label: '${VrHomeTranslationConstants.optionsLookPrefix}$lookName',
+      onPressed: () => onAction(VrHomeConstants.lookActionId),
+    ),
+    VrWorldAction(
+      id: VrHomeConstants.qualityActionId,
+      label:
+          '${VrHomeTranslationConstants.optionsQualityPrefix}${qualityPreset.tier.name.toUpperCase()}',
+      onPressed: () => onAction(VrHomeConstants.qualityActionId),
+    ),
+    VrWorldAction(
+      id: VrHomeConstants.recenterActionId,
+      label: VrHomeTranslationConstants.optionsRecenterLabel,
+      onPressed: () => onAction(VrHomeConstants.recenterActionId),
+    ),
+    if (hasMallPortals)
+      VrWorldAction(
+        id: 'rooms',
+        label: VrHomeTranslationConstants.optionsMallPlazaLabel,
+        onPressed: () => onAction('rooms'),
+      ),
+    if (bindings.onOpenSpatialSettings != null)
+      VrWorldAction(
+        id: VrHomeConstants.spatialSettingsActionId,
+        label: VrHomeTranslationConstants.optionsSpatialSensorsLabel,
+        onPressed: () => onAction(VrHomeConstants.spatialSettingsActionId),
+      ),
+    if (bindings.onOpenCastSettings != null)
+      VrWorldAction(
+        id: 'cast',
+        label: VrHomeTranslationConstants.optionsCastLabel,
+        onPressed: () => onAction('cast'),
+      ),
+    if (bindings.onPair != null)
+      VrWorldAction(
+        id: 'pair',
+        label: VrHomeTranslationConstants.optionsPairLabel,
+        onPressed: () => onAction('pair'),
+      ),
+    if (bindings.calibrationExperienceId != null)
+      VrWorldAction(
+        id: 'calibrate',
+        label: VrHomeTranslationConstants.optionsCalibrateLensesLabel,
+        onPressed: () => onAction('calibrate'),
+      ),
+    VrWorldAction(
+      id: 'close',
+      label: 'Cerrar · B',
+      color: theme.muted,
+      onPressed: onClose,
+    ),
+  ];
+  return VrWorldActionPanel3D.create(
+    name: VrHomeConstants.optionsPanelName,
+    pose: pose,
+    title: VrHomeTranslationConstants.optionsPanelTitle,
+    subtitle: VrHomeTranslationConstants.optionsPanelSubtitle,
+    description: VrHomeTranslationConstants.optionsPanelDescription,
+    actions: actions,
+    columns: 2,
+    width: 2.1,
+    buttonHeight: .18,
+    actionSpacing: .045,
+    columnSpacing: .07,
+    accentColor: theme.accent,
+    meshBuilder: meshBuilder,
+    textNodeBuilder: textNodeBuilder,
+  );
+}
+
 /// Reusable stereoscopic lobby with world-anchored catalog and navigation.
 ///
 /// The host supplies experiences and optional controller/assistant capabilities.
@@ -270,6 +359,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   bool _remotePrimaryDown = false;
   bool _remoteBackDown = false;
   bool _remoteXDown = false, _remoteYDown = false;
+  bool _remoteMenuDown = false, _remoteOptionsDown = false;
+  bool _libraryHiddenByUser = false;
   bool _modalLaserTriggerQueued = false;
   Node? _modalLaserTarget;
   bool _isDemoActive = false;
@@ -300,8 +391,18 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   int _itzliGeneration = 0;
   int _assistantSession = 0;
   VrWorldPose? _itzliPose;
+  VrWorldActionPanel3D? _optionsPanel;
+  bool _optionsOpen = false;
+  int _optionsGeneration = 0;
+  VrWorldPose? _optionsPose;
   Listenable? _assistantChanges;
   ValueListenable<VrAvatarAppearance?>? _avatarAppearance;
+
+  List<VrHomeEcosystemRoom> get _expandedEcosystemRooms =>
+      VrHomeEcosystemRoom.expandWithWorldCatalog(
+        _bindings.ecosystemRooms,
+        _bindings.catalog.entries,
+      );
 
   void _bindAvatarAppearance() {
     _avatarAppearance?.removeListener(_avatarAppearanceChanged);
@@ -333,20 +434,25 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   // Open in touch-only preparation; hiding controls enters headset interaction.
   bool _hudHidden = false;
 
-  bool get _hasWorldModal => _itzliOpen || _roomController.isOpen;
-  bool get _worldModalReady => _itzliPanel != null || _roomPanel != null;
+  bool get _hasWorldModal => _itzliOpen || _roomController.isOpen || _optionsOpen;
+  bool get _worldModalReady =>
+      _itzliPanel != null || _roomPanel != null || _optionsPanel != null;
 
   static const _navigationControllerActions = {
     'A': 'Seleccionar',
     'B': 'Detener',
     'X': 'Categoría −',
     'Y': 'Categoría +',
+    'L': VrHomeTranslationConstants.controllerMenuActionLabel,
+    'R': VrHomeTranslationConstants.optionsDockLabel,
   };
   static const _modalControllerActions = {
     'A': 'Seleccionar',
     'B': 'Cerrar',
     'X': 'Sin acción',
     'Y': 'Sin acción',
+    'L': VrHomeTranslationConstants.controllerMenuActionLabel,
+    'R': VrHomeTranslationConstants.optionsDockLabel,
   };
 
   @override
@@ -356,7 +462,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _qualityPreset = _bindings.initialQuality;
     _worldBuilder = VirtualHomeWorldBuilder(
       exhibits: _bindings.exhibits,
-      ecosystemRooms: _bindings.ecosystemRooms,
+      ecosystemRooms: _expandedEcosystemRooms,
       worldObjects: _bindings.worldObjects,
       theme: widget.theme,
     );
@@ -400,6 +506,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             if (!_hasWorldModal) _cycleLibraryCategory(-1);
           case VrHomeGamepadAction.nextCategory:
             if (!_hasWorldModal) _cycleLibraryCategory(1);
+          case VrHomeGamepadAction.toggleMainMenu:
+            _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
           case VrHomeGamepadAction.none:
             break;
         }
@@ -480,6 +588,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             !identical(oldWidget.bindings.exhibits, widget.bindings.exhibits) ||
             oldWidget.bindings.ecosystemRooms.length !=
                 widget.bindings.ecosystemRooms.length ||
+            oldWidget.bindings.catalog.entries.length !=
+                widget.bindings.catalog.entries.length ||
             oldWidget.bindings.worldObjects?.length !=
                 widget.bindings.worldObjects?.length);
 
@@ -492,6 +602,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         cancelAssistant: false,
         rebuild: false,
       );
+      _dismissOptionsPanel(announce: false, haptic: false, rebuild: false);
       final hadRoom = _roomController.isOpen;
       _closeRoomPanel(rebuild: false, notifyHost: false);
       _roomController.dispose();
@@ -511,7 +622,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _worldBuilder.dispose();
       _worldBuilder = VirtualHomeWorldBuilder(
         exhibits: _bindings.exhibits,
-        ecosystemRooms: _bindings.ecosystemRooms,
+        ecosystemRooms: _expandedEcosystemRooms,
         worldObjects: _bindings.worldObjects,
         theme: widget.theme,
       );
@@ -574,7 +685,11 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
               ),
         dockActions: [
           ('library', 'Biblioteca'),
-          if (_bindings.ecosystemRooms.isNotEmpty) ('rooms', 'Salas'),
+          if (_expandedEcosystemRooms.isNotEmpty) ('rooms', 'Salas'),
+          (
+            VrHomeConstants.optionsActionId,
+            VrHomeTranslationConstants.optionsDockLabel,
+          ),
           if (_bindings.onPair != null) ('pair', 'Mando QR'),
           if (_bindings.onOpenCastSettings != null) ('cast', 'Compartir vista'),
           if (_bindings.calibrationExperienceId != null)
@@ -602,6 +717,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         _scene.remove(previous.root);
         previous.dispose();
       }
+      panel.root.visible = !_hasWorldModal && !_libraryHiddenByUser;
       _library = panel;
       _scene.add(panel.root);
       setState(
@@ -638,6 +754,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           _hudHidden = true;
           _statusMessage = 'Entrando a la plaza de experiencias';
         });
+      case VrHomeConstants.optionsActionId:
+        _showOptionsPanel();
       case 'pair':
         _showPairing();
       case 'cast':
@@ -663,6 +781,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           );
           return;
         }
+        _libraryHiddenByUser = false;
         _library?.place(
           VrWorldPose.fromViewer(
             eye: _rig.eyeCenter,
@@ -677,9 +796,79 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     }
   }
 
+  bool _isLibraryInFrontOfViewer() {
+    final library = _library;
+    if (library == null || _libraryHiddenByUser || !library.root.visible) {
+      return false;
+    }
+    final libPos = library.worldPosition;
+    final dx = libPos.x - _rig.eyeCenter.x;
+    final dz = libPos.z - _rig.eyeCenter.z;
+    final horizontalDist = math.sqrt(dx * dx + dz * dz);
+    if (horizontalDist > VrHomeConstants.mainMenuNearbyRadiusMeters ||
+        horizontalDist < 0.05) {
+      return false;
+    }
+    final dirX = dx / horizontalDist;
+    final dirZ = dz / horizontalDist;
+    final forwardLen = math.sqrt(
+      _rig.forward.x * _rig.forward.x + _rig.forward.z * _rig.forward.z,
+    );
+    if (forwardLen < 1e-4) return true;
+    final dot =
+        (dirX * (_rig.forward.x / forwardLen)) +
+        (dirZ * (_rig.forward.z / forwardLen));
+    return dot >= VrHomeConstants.mainMenuMinForwardDot;
+  }
+
+  void _summonOrToggleMainMenu({bool toggleIfAlreadyHere = true}) {
+    if (!mounted || _isEnteringDemo || _isDemoActive) return;
+    if (!_hasWorldModal && toggleIfAlreadyHere && _isLibraryInFrontOfViewer()) {
+      _libraryHiddenByUser = true;
+      _library?.root.visible = false;
+      HapticFeedback.selectionClick();
+      setState(() {
+        _statusMessage = VrHomeTranslationConstants.mainMenuHiddenStatus;
+      });
+      return;
+    }
+    if (_hasWorldModal) {
+      _dismissWorldModal();
+    }
+    final placement = _walkSpace.placePanel(
+      eye: _rig.eyeCenter,
+      forward: _rig.forward,
+      distance: HomeSpatialMetrics.libraryDistance,
+      width: 4.2,
+    );
+    final pose = placement != null
+        ? VrWorldPose.fromViewer(
+            eye: _rig.eyeCenter,
+            forward: placement.forward,
+            distance: placement.distance,
+          )
+        : VrWorldPose.fromViewer(
+            eye: _rig.eyeCenter,
+            forward: _rig.forward,
+            distance: VrHomeConstants.mainMenuFallbackDistanceMeters,
+          );
+    _libraryHiddenByUser = false;
+    _library?.place(pose);
+    _library?.root.visible = !_hasWorldModal;
+    _locomotion.suspendSmoothLocomotion();
+    HapticFeedback.selectionClick();
+    setState(() {
+      _hudHidden = true;
+      _statusMessage = VrHomeTranslationConstants.mainMenuSummonedStatus;
+    });
+  }
+
   void _cycleLibraryCategory(int direction) {
     final library = _library;
     if (library == null || library.busy) return;
+    if (!_isLibraryInFrontOfViewer()) {
+      _summonOrToggleMainMenu(toggleIfAlreadyHere: false);
+    }
     final categories = VrDemoLibraryCategory.values;
     library.setCategory(
       categories[(library.state.category.index + direction) %
@@ -842,6 +1031,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
               _remoteBackDown = false;
               _remotePointer.reset();
               _remoteXDown = _remoteYDown = false;
+              _remoteMenuDown = _remoteOptionsDown = false;
               _modalLaserTriggerQueued = false;
               _modalLaserTarget = null;
             }
@@ -898,6 +1088,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             state.btnB ||
             state.btnX ||
             state.btnY ||
+            state.btnL ||
+            state.btnR ||
+            state.stickClick ||
             state.btnGrip ||
             state.laserSlideActive ||
             state.stickX.abs() > 0.015 ||
@@ -917,6 +1110,20 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
         final backPressed = state.btnB || state.isActionPressed;
         final primaryPressed = state.btnA;
+        final menuPressed = state.btnL || state.stickClick;
+        final optionsPressed = state.btnR;
+        if (menuPressed && !_remoteMenuDown) {
+          _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
+        }
+        if (optionsPressed && !_remoteOptionsDown) {
+          if (_optionsOpen) {
+            _dismissOptionsPanel();
+          } else {
+            _showOptionsPanel();
+          }
+        }
+        _remoteMenuDown = menuPressed;
+        _remoteOptionsDown = optionsPressed;
         if (!_hasWorldModal) {
           if (state.btnX && !_remoteXDown) _cycleLibraryCategory(-1);
           if (state.btnY && !_remoteYDown) _cycleLibraryCategory(1);
@@ -1014,6 +1221,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _remoteBackDown = state.btnB || state.isActionPressed;
     _remoteXDown = state.btnX;
     _remoteYDown = state.btnY;
+    _remoteMenuDown = state.btnL || state.stickClick;
+    _remoteOptionsDown = state.btnR;
     _remoteLaserMode =
         _isRemoteConnected && VrHomeRemotePointer.isPointing(state);
     _modalLaserTriggerQueued = false;
@@ -1046,6 +1255,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       cancelAssistant: false,
       rebuild: rebuild,
     );
+    _dismissOptionsPanel(announce: false, haptic: false, rebuild: rebuild);
     _closeRoomPanel(rebuild: rebuild);
     _demoAfterJump = null;
     _cancelJumpSafely();
@@ -1097,7 +1307,37 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
   void _createRoomController() {
     _roomController = VrHomeRoomController(
-      callback: _bindings.onRoomAction,
+      callback: (room, actionId) async {
+        if (room.purpose == VrHomeRoomPurpose.portableWorld &&
+            room.targetRouteId != null) {
+          if (actionId == VrHomeConstants.worldPortalEnterActionId) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _closeRoomPanel();
+              _openDemoById(room.targetRouteId!, room.title);
+            });
+          }
+          return VrHomeRoomPresentation(
+            title: room.title,
+            subtitle: VrHomeTranslationConstants.portableWorldEyebrow,
+            description: room.description,
+            actions: const [
+              VrHomeRoomAction(
+                id: VrHomeConstants.worldPortalEnterActionId,
+                label: VrHomeTranslationConstants.portableWorldEnterActionLabel,
+              ),
+            ],
+          );
+        }
+        final hostCallback = _bindings.onRoomAction;
+        if (hostCallback != null) {
+          return hostCallback(room, actionId);
+        }
+        return VrHomeRoomPresentation(
+          title: room.title,
+          description: room.description,
+        );
+      },
       roomChanges: _bindings.roomChanges,
       onInvalidated: () => _bindings.onRoomClosed?.call(),
     )..addListener(_roomStateChanged);
@@ -1384,7 +1624,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _libraryGeneration++;
     _hostGeneration++;
     _itzliGeneration++;
+    _optionsGeneration++;
     _itzliPanel?.removeFrom(_scene);
+    _optionsPanel?.removeFrom(_scene);
     if (_library != null) {
       _scene.remove(_library!.root);
       _library!.dispose();
@@ -1504,7 +1746,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     );
     _itzliPanel?.update(dt);
     _roomPanel?.update(dt);
-    if (_library != null) _library!.root.visible = !_hasWorldModal;
+    _optionsPanel?.update(dt);
+    if (_library != null) {
+      _library!.root.visible = !_hasWorldModal && !_libraryHiddenByUser;
+    }
 
     // 3. Update 3D Controller & Laser Pointer for 2nd Smartphone Remote Controller
     if (_isRemoteConnected) {
@@ -1913,6 +2158,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (_roomController.isOpen) {
       return _roomPanel?.ownsInteractiveNode(node) ?? false;
     }
+    if (_optionsOpen) {
+      return _optionsPanel?.ownsInteractiveNode(node) ?? false;
+    }
     if (_itzliOpen) {
       return !_assistantCapturing &&
           (_itzliPanel?.ownsInteractiveNode(node) ?? false);
@@ -1942,6 +2190,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
   String? get _worldModalFocusedLabel {
     if (_roomController.isOpen) return _roomPanel?.focusedAction.label;
+    if (_optionsOpen) return _optionsPanel?.focusedAction.label;
     if (_itzliOpen) return _itzliPanel?.focusedAction.label;
     return null;
   }
@@ -1949,6 +2198,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   void _handleWorldModalHover(Node? node) {
     if (_roomController.isOpen) {
       _roomPanel?.handleHover(node);
+      return;
+    }
+    if (_optionsOpen) {
+      _optionsPanel?.handleHover(node);
       return;
     }
     if (_itzliOpen) {
@@ -1961,6 +2214,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _roomPanel?.handleSelect(node);
       return;
     }
+    if (_optionsOpen) {
+      _optionsPanel?.handleSelect(node);
+      return;
+    }
     if (_itzliOpen) {
       _itzliPanel?.handleSelect(node);
     }
@@ -1971,6 +2228,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _roomPanel?.activateFocused();
       return;
     }
+    if (_optionsOpen) {
+      _optionsPanel?.activateFocused();
+      return;
+    }
     if (_itzliOpen && !_assistantCapturing) {
       _itzliPanel?.activateFocused();
     }
@@ -1979,6 +2240,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   void _dismissWorldModal() {
     if (_roomController.isOpen) {
       _closeRoomPanel();
+      return;
+    }
+    if (_optionsOpen) {
+      _dismissOptionsPanel();
       return;
     }
     if (_itzliOpen) {
@@ -1997,7 +2262,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     }
     _modalNavigationLatched = true;
 
-    final panel = _roomController.isOpen ? _roomPanel : _itzliPanel;
+    final panel = _roomController.isOpen
+        ? _roomPanel
+        : (_optionsOpen ? _optionsPanel : _itzliPanel);
     if (panel == null) return;
     if (x.abs() > y.abs()) {
       panel.moveGridFocus(horizontal: x > 0 ? 1 : -1);
@@ -2010,6 +2277,159 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       setState(() => _statusMessage = label);
     }
     HapticFeedback.selectionClick();
+  }
+
+  void _showOptionsPanel() {
+    if (!mounted || _isEnteringDemo || _isDemoActive || _locomotion.isJumping) {
+      return;
+    }
+    if (_roomController.isOpen) _closeRoomPanel(rebuild: false);
+    if (_itzliOpen) {
+      _dismissItzliPanel(
+        announce: false,
+        haptic: false,
+        cancelAssistant: false,
+        rebuild: false,
+      );
+    }
+    final placement = _walkSpace.placePanel(
+      eye: _rig.eyeCenter,
+      forward: _rig.forward,
+      distance: HomeSpatialMetrics.modalDistance,
+    );
+    _optionsPose = placement != null
+        ? VrWorldPose.fromViewer(
+            eye: _rig.eyeCenter.clone(),
+            forward: placement.forward,
+            distance: placement.distance,
+          )
+        : VrWorldPose.fromViewer(
+            eye: _rig.eyeCenter.clone(),
+            forward: _rig.forward,
+            distance: HomeSpatialMetrics.modalDistance,
+          );
+    _locomotion.suspendSmoothLocomotion();
+    _optionsPanel?.removeFrom(_scene);
+    _optionsPanel = null;
+    _modalNavigationLatched = false;
+    _modalLaserTriggerQueued = false;
+    _modalLaserTarget = null;
+    setState(() {
+      _optionsOpen = true;
+      _hudHidden = true;
+      _hoveredPedestal = null;
+      _hoveredWaypoint = null;
+      _statusMessage = VrHomeTranslationConstants.optionsOpenedStatus;
+    });
+    _syncControllerActions();
+    HapticFeedback.selectionClick();
+    unawaited(_rebuildOptionsPanel());
+  }
+
+  Future<void> _rebuildOptionsPanel() async {
+    if (!mounted || !_optionsOpen || _optionsPose == null) return;
+    final generation = ++_optionsGeneration;
+    try {
+      final panel = await createVrHomeOptionsPanel(
+        bindings: _bindings,
+        pose: _optionsPose!,
+        lookName: _lookName,
+        qualityPreset: _qualityPreset,
+        hasMallPortals: _worldBuilder.ecosystemLayout.portals.isNotEmpty,
+        theme: widget.theme,
+        onAction: _handleOptionsAction,
+        onClose: _dismissOptionsPanel,
+      );
+      if (!mounted || generation != _optionsGeneration || !_optionsOpen) return;
+      final previous = _optionsPanel;
+      if (previous != null) {
+        final focused = panel.actions.indexWhere(
+          (action) => action.id == previous.focusedAction.id && action.enabled,
+        );
+        if (focused >= 0) panel.setFocus(focused);
+      }
+      panel.reanchor(_optionsPose!);
+      previous?.removeFrom(_scene);
+      _optionsPanel = panel;
+      panel.addTo(_scene);
+      _modalLaserTarget = null;
+      _modalLaserTriggerQueued = false;
+      setState(() {});
+    } catch (error, stackTrace) {
+      if (!mounted || generation != _optionsGeneration) return;
+      debugPrint('Could not create Home options panel: $error\n$stackTrace');
+    }
+  }
+
+  void _handleOptionsAction(String actionId) {
+    if (!mounted || !_optionsOpen) return;
+    switch (actionId) {
+      case VrHomeConstants.lookActionId:
+        _cycleVisualLook();
+        unawaited(_rebuildOptionsPanel());
+      case VrHomeConstants.qualityActionId:
+        _toggleResolution();
+        unawaited(_rebuildOptionsPanel());
+      case VrHomeConstants.recenterActionId:
+        _recenterView();
+        _optionsPose = VrWorldPose.fromViewer(
+          eye: _rig.eyeCenter.clone(),
+          forward: _rig.forward,
+          distance: HomeSpatialMetrics.modalDistance,
+        );
+        unawaited(_rebuildOptionsPanel());
+      case 'rooms':
+        _dismissOptionsPanel(announce: false, haptic: false);
+        _libraryAction('rooms');
+      case 'itzli':
+        _dismissOptionsPanel(announce: false, haptic: false);
+        _showItzliPanel();
+      case VrHomeConstants.spatialSettingsActionId:
+        _dismissOptionsPanel(announce: false, haptic: false);
+        _locomotion.suspendSmoothLocomotion();
+        _bindings.onOpenSpatialSettings?.call(context);
+      case 'cast':
+        _dismissOptionsPanel(announce: false, haptic: false);
+        _locomotion.suspendSmoothLocomotion();
+        _bindings.onOpenCastSettings?.call(context);
+      case 'pair':
+        _dismissOptionsPanel(announce: false, haptic: false);
+        unawaited(_showPairing());
+      case 'calibrate':
+        _dismissOptionsPanel(announce: false, haptic: false);
+        _libraryAction('calibrate');
+    }
+  }
+
+  void _dismissOptionsPanel({
+    bool announce = true,
+    bool haptic = true,
+    bool rebuild = true,
+  }) {
+    if (!_optionsOpen || !mounted) return;
+    _optionsGeneration++;
+    _optionsPanel?.removeFrom(_scene);
+    _optionsPanel = null;
+    _optionsPose = null;
+    _modalNavigationLatched = false;
+    _modalLaserTriggerQueued = false;
+    _modalLaserTarget = null;
+    void dismiss() {
+      _optionsOpen = false;
+      _hoveredPedestal = null;
+      _hoveredWaypoint = null;
+      if (announce) {
+        _statusMessage = VrHomeTranslationConstants.optionsClosedStatus;
+      }
+    }
+
+    if (rebuild) {
+      setState(dismiss);
+    } else {
+      dismiss();
+    }
+    _syncControllerActions();
+    if (haptic) HapticFeedback.selectionClick();
   }
 
   Map<String, String>? _assistantWorldTarget() {

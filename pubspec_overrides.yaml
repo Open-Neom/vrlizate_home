@@ -18,3 +18,5 @@ dependency_overrides:
     path: ../vrlizate_spatial_audio
   vrlizate_physics:
     path: ../vrlizate_physics
+  wordsphere:
+    path: ../../../wordsphere_plugin

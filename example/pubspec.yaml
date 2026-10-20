@@ -43,6 +43,8 @@ dependency_overrides:
     path: ../../vrlizate_widgets
   vrlizate_joystick:
     path: ../../vrlizate_joystick
+  wordsphere:
+    path: ../../../../wordsphere_plugin
 dev_dependencies:
   flutter_test:
     sdk: flutter

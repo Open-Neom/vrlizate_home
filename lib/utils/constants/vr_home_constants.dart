@@ -48,4 +48,20 @@ abstract final class VrHomeConstants {
   static const String keyCorridorWidthMeters = 'corridorWidthMeters';
   static const String keySpawnRoomId = 'spawnRoomId';
   static const String keyRooms = 'rooms';
+
+  static const String portableWorldRoomPrefix = 'vrlw_room_';
+  static const String portableWorldTag = 'worlds';
+  static const int portableWorldDefaultAccent = 0xFF63E6BE;
+  static const String worldPortalEnterActionId = 'enter_world';
+
+  static const double mainMenuNearbyRadiusMeters = 4.5;
+  static const double mainMenuMinForwardDot = 0.32;
+  static const double mainMenuFallbackDistanceMeters = 2.45;
+
+  static const String optionsActionId = 'options';
+  static const String lookActionId = 'look';
+  static const String qualityActionId = 'quality';
+  static const String spatialSettingsActionId = 'spatial_settings';
+  static const String recenterActionId = 'recenter';
+  static const String optionsPanelName = 'vr_home_options';
 }

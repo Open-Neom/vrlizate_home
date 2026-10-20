@@ -4,7 +4,10 @@ import 'package:vrlizate_home/src/ecosystem/vr_home_ecosystem_room.dart';
 import 'package:vrlizate_home/src/spatial/home_ecosystem_layout.dart';
 import 'package:vrlizate_home/src/spatial/home_lobby_layout.dart';
 import 'package:vrlizate_home/src/spatial/home_walk_space.dart';
+import 'package:vrlizate/vrlizate.dart';
 import 'package:vrlizate_home/src/spatial/home_room_identity.dart';
+import 'package:vrlizate_home/src/spatial/vr_demo_library_model.dart';
+import 'package:vrlizate_home/src/spatial/vr_home_input_policy.dart';
 
 void main() {
   test('default rooms have distinct stable host routes and purposes', () {
@@ -21,7 +24,11 @@ void main() {
     expect(
       VrHomeEcosystemRoom.defaults.map((r) => r.purpose).toSet(),
       VrHomeRoomPurpose.values
-          .where((purpose) => purpose != VrHomeRoomPurpose.openSourceGames)
+          .where(
+            (purpose) =>
+                purpose != VrHomeRoomPurpose.openSourceGames &&
+                purpose != VrHomeRoomPurpose.portableWorld,
+          )
           .toSet(),
     );
     expect(() => VrHomeEcosystemRoom.defaults.clear(), throwsUnsupportedError);
@@ -291,6 +298,113 @@ void main() {
           waypoint.roomId,
           reason: waypoint.id,
         );
+      }
+    },
+  );
+
+  test(
+    'expandWithWorldCatalog appends .vrlw storefronts to the Mall boulevard',
+    () {
+      const worldEntries = [
+        VrDemoLibraryEntry(
+          id: 'world_oasis',
+          title: 'Oasis Solar .vrlw',
+          subtitle: 'Santuario desértico interactivo',
+          category: VrDemoLibraryCategory.featured,
+          accent: 0xFF38BDF8,
+          icon: 'world',
+          tags: ['worlds'],
+        ),
+        VrDemoLibraryEntry(
+          id: 'world_citadel',
+          title: 'Ciudadela Neón .vrlw',
+          subtitle: 'Distrito cyberpunk vertical',
+          category: VrDemoLibraryCategory.featured,
+          accent: 0xFFA78BFA,
+          icon: 'world',
+          tags: ['worlds'],
+        ),
+        VrDemoLibraryEntry(
+          id: 'game_ignored',
+          title: 'Arcade Retro',
+          subtitle: 'No es un mundo .vrlw',
+          category: VrDemoLibraryCategory.games,
+          accent: 0xFF22C55E,
+          icon: 'gamepad',
+          tags: ['games'],
+        ),
+      ];
+      final expanded = VrHomeEcosystemRoom.expandWithWorldCatalog(
+        VrHomeEcosystemRoom.defaults,
+        worldEntries,
+      );
+      expect(expanded.length, VrHomeEcosystemRoom.defaults.length + 2);
+      final worldRooms = expanded
+          .where((r) => r.purpose == VrHomeRoomPurpose.portableWorld)
+          .toList();
+      expect(worldRooms.map((r) => r.targetRouteId), [
+        'world_oasis',
+        'world_citadel',
+      ]);
+
+      final layout = HomeEcosystemLayout(expanded);
+      final space = HomeWalkSpace(rooms: layout.rooms, boxes: layout.boxes);
+      for (final worldRoom in worldRooms) {
+        final portal = layout.portals.singleWhere(
+          (p) => p.room.id == worldRoom.id,
+        );
+        expect(space.canStand(portal.doorX, portal.z), isTrue);
+        expect(space.canStand(portal.standingX, portal.z), isTrue);
+        expect(
+          layout.boxes.any(
+            (b) => b.name == 'ecosystem_${worldRoom.id}_world_compass_stage',
+          ),
+          isTrue,
+        );
+        expect(
+          layout.boxes.any(
+            (b) => b.name == 'ecosystem_${worldRoom.id}_world_portal_orb',
+          ),
+          isTrue,
+        );
+        expect(
+          space.placePanel(
+            eye: vm.Vector3(portal.standingX, 1.6, portal.z),
+            forward: vm.Vector3(portal.side, 0, 0),
+            distance: 3,
+          ),
+          isNotNull,
+        );
+      }
+    },
+  );
+
+  test(
+    'VrHomeGamepadPolicy maps L1, R1, Start and Select to toggleMainMenu',
+    () {
+      final policy = VrHomeGamepadPolicy();
+      for (final btn in const ['l1', 'r1', 'start', 'select', 'menu']) {
+        final down = VrInputEvent(
+          type: VrInputType.trigger,
+          source: VrInputSource.gamepad,
+          active: true,
+          data: {VrGamepadDriver.buttonKey: btn},
+        );
+        expect(policy.handle(down), VrHomeGamepadAction.toggleMainMenu);
+        final held = VrInputEvent(
+          type: VrInputType.trigger,
+          source: VrInputSource.gamepad,
+          active: true,
+          data: {VrGamepadDriver.buttonKey: btn},
+        );
+        expect(policy.handle(held), VrHomeGamepadAction.none);
+        final up = VrInputEvent(
+          type: VrInputType.trigger,
+          source: VrInputSource.gamepad,
+          active: false,
+          data: {VrGamepadDriver.buttonKey: btn},
+        );
+        expect(policy.handle(up), VrHomeGamepadAction.none);
       }
     },
   );

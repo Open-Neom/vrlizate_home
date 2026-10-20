@@ -63,5 +63,11 @@ class HomeRoomIdentity {
           0xFF76606A,
           0xFF9C3E4F,
         ),
+        VrHomeRoomPurpose.portableWorld => const HomeRoomIdentity(
+          'PORTAL DE MUNDO .VRLW',
+          0xFF8FB8B2,
+          0xFFD2E5E2,
+          0xFF3B7A75,
+        ),
       };
 }

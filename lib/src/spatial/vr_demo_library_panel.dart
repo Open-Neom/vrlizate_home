@@ -244,6 +244,7 @@ class VrDemoLibraryPanel {
 
   bool get busy => _busy;
   String? get hoveredRoute => _hoveredRoute;
+  vm.Vector3 get worldPosition => root.localTransform.getTranslation();
   bool owns(Node node) =>
       !_disposed && !busy && root.visible && _actions.containsKey(node);
   String? routeFor(Node node) => _routes[node];

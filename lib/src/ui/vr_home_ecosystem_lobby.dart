@@ -190,5 +190,6 @@ class _VrHomeEcosystemLobbyState extends State<VrHomeEcosystemLobby> {
     VrHomeRoomIcon.music => Icons.headphones_rounded,
     VrHomeRoomIcon.spa => Icons.spa_outlined,
     VrHomeRoomIcon.movie => Icons.movie_outlined,
+    VrHomeRoomIcon.world => Icons.public_rounded,
   };
 }

@@ -1046,6 +1046,69 @@ class HomeEcosystemLayout {
               0xFFFFDF9C,
             );
           }
+        case VrHomeRoomPurpose.portableWorld:
+          part(
+            'world_compass_stage',
+            7.2,
+            .12,
+            -2.0,
+            2.8,
+            .24,
+            1.4,
+            HomeLobbyFinish.stone,
+            0xFF3E7C78,
+            HomeLobbyShape.beveledBox,
+          );
+          for (final pillarSide in const [-1.0, 1.0]) {
+            part(
+              'world_portal_pillar_$pillarSide',
+              7.2 + pillarSide * .95,
+              1.45,
+              -2.0,
+              .26,
+              2.4,
+              .26,
+              HomeLobbyFinish.oak,
+              0xFF285956,
+              HomeLobbyShape.cylinder,
+            );
+          }
+          part(
+            'world_portal_lintel',
+            7.2,
+            2.75,
+            -2.0,
+            2.35,
+            .24,
+            .34,
+            HomeLobbyFinish.trim,
+            0xFF63E6BE,
+            HomeLobbyShape.beveledBox,
+          );
+          part(
+            'world_portal_orb',
+            7.2,
+            1.45,
+            -2.0,
+            .75,
+            .75,
+            .75,
+            HomeLobbyFinish.fabric,
+            0xFF63E6BE,
+            HomeLobbyShape.ellipsoid,
+          );
+          part(
+            'world_horizon_display',
+            7.1,
+            2.45,
+            2.62,
+            3.8,
+            1.65,
+            .12,
+            HomeLobbyFinish.plaster,
+            0xFF8EE8D8,
+            HomeLobbyShape.beveledBox,
+          );
       }
     }
     zone = 'promenade';
