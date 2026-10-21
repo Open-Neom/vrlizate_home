@@ -64,4 +64,5 @@ abstract final class VrHomeConstants {
   static const String spatialSettingsActionId = 'spatial_settings';
   static const String recenterActionId = 'recenter';
   static const String optionsPanelName = 'vr_home_options';
+  static const double defaultGazeDwellSeconds = 3.2;
 }

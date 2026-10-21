@@ -981,6 +981,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       actions: _hasWorldModal
           ? _modalControllerActions
           : _navigationControllerActions,
+      horizontalLook: true,
     );
   }
 
@@ -1055,6 +1056,13 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             _isDemoActive ||
             !(ModalRoute.of(context)?.isCurrent ?? true)) {
           return;
+        }
+        if (!_isRemoteConnected && _remoteController.isConnected) {
+          _arbiter.setDwellSuppressed(VrInputSource.remotePhone, true);
+          setState(() {
+            _isRemoteConnected = true;
+            _hudHidden = true;
+          });
         }
         if (state.isNeutralized) {
           // The watchdog's synthetic release cancels travel and its heading
@@ -1239,6 +1247,11 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       return;
     }
     _homeProducersSuspended = false;
+    final connectedNow = _remoteController.isConnected;
+    if (_isRemoteConnected != connectedNow) {
+      _isRemoteConnected = connectedNow;
+    }
+    _arbiter.setDwellSuppressed(VrInputSource.remotePhone, _isRemoteConnected);
     _seedHeldRemoteButtons();
     _syncControllerActions();
     _setGamepadAttached(true);
@@ -2739,7 +2752,11 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                   lookInputEnabled: false,
                   gazeEnabled:
                       _hudHidden && !(_isRemoteConnected && _remoteLaserMode),
-                  showReticle: _hudHidden && !_assistantCapturing,
+                  showReticle:
+                      _hudHidden &&
+                      !_assistantCapturing &&
+                      !_isRemoteConnected &&
+                      !_arbiter.isGazeSuppressed,
                   onQualityChanged: (preset) {
                     // The scene is the single owner of adaptive quality. Its
                     // initial callback may run during build.
@@ -2756,11 +2773,16 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                       }
                     });
                   },
-                  // Selection enters the demo immediately; the rearm gate prevents repeats.
-                  gazeDwellSeconds: 1.4,
+                  // When a joystick is connected, timed gaze auto-click is disabled
+                  // so users can freely read cards and signs without accidentally
+                  // launching experiences; pressing A selects the hovered target.
+                  gazeDwellSeconds: VrHomeConstants.defaultGazeDwellSeconds,
                   gazeFilter: _gazeFilter,
                   onGazeHoverChanged: _onHover,
-                  onGazeSelect: _onSelect,
+                  onGazeSelect:
+                      (_isRemoteConnected || _arbiter.isGazeSuppressed)
+                      ? null
+                      : _onSelect,
                   onTick: _tick,
                 ),
 
