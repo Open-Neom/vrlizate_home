@@ -1,9 +1,14 @@
-## 1.0.0 - 2026-10-17
+## 1.0.0 - 2026-10-20
 
 - Promover `vrlizate_home` a la versión estable `1.0.0` bajo la estructura modular Open Neom (`lib/utils/constants/`, `lib/utils/enums/`, `lib/domain/models/`, `lib/ui/`).
-- Añadir `VrHomeConstants` y `VrHomeTranslationConstants`, extrayendo todos los textos e identificadores de interfaz en `VrHomeLanding`.
-- Añadir `VrHomeZoneKind` (`centralAtrium`, `arcadeHall`, `appGallery`, `worldPortalBay`, `relaxationSanctuary`, `customRoom`) para clasificar zonas arquitectónicas del lobby.
-- Añadir `VrHomeRoomBlueprint` y `VrHomeMallBlueprint` para configuración declarativa y validada de salas y plazas espaciales por desarrolladores.
+- **Expansión dinámica del Mall 3D con mundos `.vrlw` (`VrHomeEcosystemRoom.expandWithWorldCatalog`, `VrHomeRoomPurpose.portableWorld`, `VrHomeRoomIcon.world`):** cada paquete `.vrlw` del catálogo añade automáticamente su propio local ("storefront") en la Plaza de Experiencias con arco de portal 3D (`world_compass_stage`, `world_portal_pillar`, `world_portal_orb`), letrero y terminal interactiva para entrar directamente al mundo `.vrlw`.
+- **Menú Principal y Panel de Opciones VR 3D invocables desde cualquier lugar con el Joystick:**
+  - Botón `L` (`btnL`, `stickClick`, o `L1`/`R1`/`Start`/`Select` en gamepad físico) invoca u oculta la Biblioteca Principal 3D (`_summonOrToggleMainMenu`) justo frente a la posición y mirada actual del usuario sin tener que regresar a la entrada (`z = 0`).
+  - Botones `X` / `Y` traen automáticamente el Menú Principal frente al usuario si se encuentra recorriendo el Mall y cambian de categoría.
+  - Botón `R` (`btnR`) o acción `'options'` del dock abre el modal 3D `createVrHomeOptionsPanel` frente al usuario para cambiar Ambiente (`Look`), Calidad/Resolución, Recentrar vista, Sensores 3D, Compartir vista (Cast), Mando QR, Calibrar lentes o saltar a Plaza Mall.
+- Añadir `VrHomeLoadingSplashOverlay` y soporte para galería `VrHomeRoomPurpose.openSourceGames`.
+- Añadir `VrHomeConstants` y `VrHomeTranslationConstants`, extrayendo todos los textos e identificadores de interfaz.
+- Añadir `VrHomeZoneKind`, `VrHomeRoomBlueprint` y `VrHomeMallBlueprint` para configuración declarativa y validada de salas y plazas espaciales.
 
 ## 0.1.0
 
