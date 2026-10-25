@@ -17,7 +17,14 @@ void main() {
       expect(layout.worldObjects, hasLength(8));
       expect(layout.worldObjects.map((e) => e.id).toSet(), hasLength(8));
       final first = layout.worldObjects.first;
-      expect(first.transform.position, VrWorldPosition(-5.2, .65, 16.5));
+      expect(
+        first.transform.position,
+        VrWorldPosition(
+          -5.2,
+          .65,
+          HomeEcosystemLayout.firstRowZ - HomeEcosystemLayout.rowPitch / 2,
+        ),
+      );
       final boxes = HomeWorldObjects.boxesFor(first);
       expect(boxes, hasLength(3));
       expect(boxes.map((box) => box.shape), [

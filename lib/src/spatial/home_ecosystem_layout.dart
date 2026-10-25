@@ -27,7 +27,7 @@ class HomeEcosystemPortal {
   double get signX => doorX - side * .45;
   double get roomCenterX => (floor.minX + floor.maxX) / 2;
   double get displayOffset => HomeEcosystemLayout.roomHalfFrontage * .7;
-  double get doorHalfWidth => 1.6;
+  double get doorHalfWidth => HomeEcosystemLayout.doorHalfWidth;
   double get yaw => -side * math.pi / 2;
 }
 
@@ -36,13 +36,15 @@ class HomeEcosystemPortal {
 /// full-size experience rooms. Rendering and collision share every solid.
 /// An empty inventory preserves the original Home exactly.
 class HomeEcosystemLayout {
-  static const plazaHalfWidth = 12.0;
-  static const roomDepth = 9.8;
-  static const roomHalfFrontage = 4.0;
-  static const rowPitch = 11.0;
-  static const firstRowZ = 22.0;
+  static const plazaHalfWidth = 15.0;
+  static const roomDepth = 14.0;
+  static const roomHalfFrontage = 5.5;
+  static const rowPitch = 14.0;
+  static const firstRowZ = 24.0;
   static const entryZ = 12.5;
-  static const arcadeX = 8.5;
+  static const entryHalfWidth = 2.0;
+  static const doorHalfWidth = 2.2;
+  static const arcadeX = 11.5;
 
   factory HomeEcosystemLayout(
     Iterable<VrHomeEcosystemRoom> rooms, {
@@ -77,7 +79,7 @@ class HomeEcosystemLayout {
       }
     }
     final rows = (supplied.length / 2).ceil();
-    final endZ = 18.0 + rows * rowPitch;
+    final endZ = firstRowZ + (rows - 1) * rowPitch + roomHalfFrontage + 3.0;
     final spaces = <HomeRoom>[
       ...HomeLobbyLayout.rooms,
       HomeRoom(
@@ -137,10 +139,23 @@ class HomeEcosystemLayout {
     }
 
     // The original gallery keeps its doorway. Beyond the lintel the ceiling
-    // rises and the floor opens to a 24 m arrival square, not a scaled hallway.
-    box('entry_left', -2.55, 2.3, entryZ, 2.7, 4.6, .2);
-    box('entry_right', 2.55, 2.3, entryZ, 2.7, 4.6, .2);
-    box('entry_lintel', 0, 3.8, entryZ, 2.4, 1.6, .2, HomeLobbyFinish.oak);
+    // rises and the floor opens to a 30 m arrival square. The original gallery
+    // joins through a wider opening without moving its exhibits or library.
+    const galleryOuterX = 3.9;
+    const entryPierWidth = galleryOuterX - entryHalfWidth;
+    const entryPierX = (galleryOuterX + entryHalfWidth) / 2;
+    box('entry_left', -entryPierX, 2.3, entryZ, entryPierWidth, 4.6, .2);
+    box('entry_right', entryPierX, 2.3, entryZ, entryPierWidth, 4.6, .2);
+    box(
+      'entry_lintel',
+      0,
+      3.8,
+      entryZ,
+      entryHalfWidth * 2,
+      1.6,
+      .2,
+      HomeLobbyFinish.oak,
+    );
     final plazaCenterZ = (entryZ + endZ) / 2;
     final plazaLength = endZ - entryZ;
     box(
@@ -170,10 +185,10 @@ class HomeEcosystemLayout {
     for (final side in const [-1.0, 1.0]) {
       box(
         'entry_wing_$side',
-        side * 7.95,
+        side * (plazaHalfWidth + galleryOuterX) / 2,
         2.3,
         entryZ,
-        8.1,
+        plazaHalfWidth - galleryOuterX,
         4.6,
         .2,
         HomeLobbyFinish.plaster,
@@ -181,7 +196,7 @@ class HomeEcosystemLayout {
       );
       box(
         'ceiling_gallery_$side',
-        side * 10.65,
+        side * (plazaHalfWidth - 1.35),
         4.65,
         plazaCenterZ,
         2.7,
@@ -192,7 +207,7 @@ class HomeEcosystemLayout {
       );
       box(
         'arcade_light_band_$side',
-        side * 9.35,
+        side * (plazaHalfWidth - 2.65),
         4.53,
         plazaCenterZ,
         .15,
@@ -203,7 +218,7 @@ class HomeEcosystemLayout {
       );
       box(
         'clerestory_$side',
-        side * 11.95,
+        side * (plazaHalfWidth - .05),
         6.55,
         plazaCenterZ,
         .2,
@@ -214,7 +229,7 @@ class HomeEcosystemLayout {
       );
       box(
         'clerestory_rail_$side',
-        side * 11.8,
+        side * (plazaHalfWidth - .2),
         5.05,
         plazaCenterZ,
         .2,
@@ -223,7 +238,7 @@ class HomeEcosystemLayout {
         HomeLobbyFinish.oak,
         0xFFAA9270,
       );
-      for (final x in const [1.9, 7.3, 10.1]) {
+      for (final x in const [1.9, plazaHalfWidth - 4.7, plazaHalfWidth - 1.9]) {
         box(
           'paving_border_${side}_$x',
           side * x,
@@ -276,7 +291,7 @@ class HomeEcosystemLayout {
       for (final side in const [-1.0, 1.0]) {
         box(
           'clerestory_mullion_${row}_$side',
-          side * 11.75,
+          side * (plazaHalfWidth - .25),
           6.5,
           z,
           .22,
@@ -297,7 +312,7 @@ class HomeEcosystemLayout {
         z,
         plazaHalfWidth * 2,
         .012,
-        3.2,
+        doorHalfWidth * 2,
         HomeLobbyFinish.stone,
         0xFFECE4D5,
       );
@@ -306,7 +321,7 @@ class HomeEcosystemLayout {
           'crosswalk_edge_${row}_$direction',
           0,
           .015,
-          z + direction * 1.64,
+          z + direction * (doorHalfWidth + .04),
           plazaHalfWidth * 2,
           .018,
           .08,
@@ -390,13 +405,16 @@ class HomeEcosystemLayout {
         z,
         .2,
         1.6,
-        3.2,
+        doorHalfWidth * 2,
         HomeLobbyFinish.oak,
       );
       // Preserve each authored room's silhouette, with generous floor area and
-      // a 3.2 m entrance. The local furniture coordinates predate the plaza.
+      // a 4.4 m entrance. Furniture keeps its previous physical scale while
+      // positions spread into the larger floor; facade parts follow its edges.
       const depthScale = roomDepth / 7.8;
       const frontageScale = roomHalfFrontage / 3;
+      const furnitureDepthScale = 9.8 / 7.8;
+      const furnitureFrontageScale = 4.0 / 3;
       void part(
         String name,
         double x,
@@ -409,14 +427,37 @@ class HomeEcosystemLayout {
         int? color,
         HomeLobbyShape shape = HomeLobbyShape.cuboid,
       ]) {
+        final architecture =
+            name.startsWith('display_sill_') ||
+            name.startsWith('display_header_') ||
+            name.startsWith('door_pillar_') ||
+            name.startsWith('display_frame_') ||
+            name.startsWith('window_ledge_') ||
+            name.startsWith('marquee_light_') ||
+            name == 'fascia' ||
+            name == 'canopy' ||
+            name == 'threshold' ||
+            name == 'interior_inlay';
+        // Keep chairs, shelves and their component parts assembled at their
+        // authored scale. Translate their back-wall and side groups instead
+        // of stretching the distance between a sofa's seat and its backrest.
+        final localX = architecture
+            ? (x - 2.5) * depthScale
+            : (x - 2.5) * furnitureDepthScale + (roomDepth - 9.8);
+        final localZ = architecture
+            ? offset * frontageScale
+            : offset * furnitureFrontageScale +
+                  (offset.abs() >= 1
+                      ? offset.sign * (roomHalfFrontage - 4.0) * .7
+                      : 0);
         box(
           '${room.id}_$name',
-          side * (plazaHalfWidth + (x - 2.5) * depthScale),
+          side * (plazaHalfWidth + localX),
           y,
-          z + offset * frontageScale,
-          width * depthScale,
+          z + localZ,
+          width * (architecture ? depthScale : furnitureDepthScale),
           height,
-          depth * frontageScale,
+          depth * (architecture ? frontageScale : furnitureFrontageScale),
           finish,
           color,
           shape,
@@ -504,7 +545,7 @@ class HomeEcosystemLayout {
           // dedicated creator/game room. The host owns the real game content;
           // these static forms never pretend that a runtime has been loaded.
           // Both side displays leave the complete central terminal approach
-          // clear, including the authored 3.2 m doorway and panel width.
+          // clear, including the authored 4.4 m doorway and panel width.
           part(
             'community_stage',
             7.4,

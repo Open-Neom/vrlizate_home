@@ -24,6 +24,7 @@ class LaserPointerNode {
   final Node rootNode;
   final Node controllerMeshNode;
   final Node joystickKnobNode;
+  final Node lookKnobNode;
 
   /// Parent of the fading stub segments. Kept under its historical name.
   final Node laserBeamNode;
@@ -84,6 +85,7 @@ class LaserPointerNode {
     required this.rootNode,
     required this.controllerMeshNode,
     required this.joystickKnobNode,
+    required this.lookKnobNode,
     required this.laserBeamNode,
     required this.pointerDotNode,
     required List<PhysicallyBasedMaterial> stubMats,
@@ -429,6 +431,7 @@ class LaserPointerNode {
       rootNode: root,
       controllerMeshNode: controllerNode,
       joystickKnobNode: joystickKnob,
+      lookKnobNode: lookKnob,
       laserBeamNode: stubRoot,
       pointerDotNode: reticle,
       stubMats: stubMats,
@@ -451,9 +454,17 @@ class LaserPointerNode {
   }
 
   /// Updates 3D mini-joystick knob deflection on top of the phone mesh.
-  void setStickDeflection(double x, double y) {
+  void setStickDeflection(
+    double x,
+    double y, {
+    double lookX = 0.0,
+    double lookY = 0.0,
+  }) {
     joystickKnobNode.localTransform = vm.Matrix4.translation(
       vm.Vector3(0.038 - x * 0.009, 0.010, 0.002 - y * 0.009),
+    );
+    lookKnobNode.localTransform = vm.Matrix4.translation(
+      vm.Vector3(-0.038 - lookX * 0.009, 0.0098, 0.002 - lookY * 0.009),
     );
   }
 

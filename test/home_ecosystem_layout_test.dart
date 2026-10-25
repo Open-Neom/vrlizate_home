@@ -91,7 +91,13 @@ void main() {
     final layout = HomeEcosystemLayout(VrHomeEcosystemRoom.defaults);
     final space = HomeWalkSpace(rooms: layout.rooms, boxes: layout.boxes);
     expect(space.canStand(0, 12.5), isTrue);
-    expect(space.canStand(1.15, 12.5), isFalse);
+    expect(
+      space.canStand(
+        HomeEcosystemLayout.entryHalfWidth - .08,
+        HomeEcosystemLayout.entryZ,
+      ),
+      isFalse,
+    );
     for (final portal in layout.portals) {
       expect(space.canStand(portal.doorX, portal.z), isTrue);
       expect(
@@ -202,10 +208,16 @@ void main() {
       (portal) => portal.room.id == 'cinema',
     );
     expect(cinema.room.id, 'cinema');
-    expect(cinema.z, 55);
+    expect(
+      cinema.z,
+      HomeEcosystemLayout.firstRowZ + 3 * HomeEcosystemLayout.rowPitch,
+    );
     expect(space.canStand(cinema.doorX, cinema.z), isTrue);
     expect(space.canStand(-cinema.doorX, cinema.z), isTrue);
-    for (var z = 14.0; z < 61; z += .2) {
+    final plaza = layout.rooms.singleWhere(
+      (room) => room.id == 'ecosystem_corridor',
+    );
+    for (var z = HomeEcosystemLayout.entryZ + 1; z < plaza.maxZ - 1; z += .2) {
       expect(space.canStand(-1.3, z), isTrue);
       expect(space.canStand(1.3, z), isTrue);
     }
@@ -219,16 +231,16 @@ void main() {
       final plaza = layout.rooms.singleWhere(
         (room) => room.id == 'ecosystem_corridor',
       );
-      expect(plaza.maxX - plaza.minX, greaterThanOrEqualTo(20));
+      expect(plaza.maxX - plaza.minX, greaterThanOrEqualTo(30));
       expect(
         (plaza.maxX - plaza.minX) * (plaza.maxZ - plaza.minZ),
-        greaterThan(1000),
+        greaterThan(1800),
       );
       for (final portal in layout.portals) {
         expect(
           (portal.floor.maxX - portal.floor.minX) *
               (portal.floor.maxZ - portal.floor.minZ),
-          greaterThan(70),
+          greaterThan(150),
         );
       }
       // Side arcades remain traversable around the planted seating islands, not
@@ -255,11 +267,59 @@ void main() {
       // entire plaza. Furniture cannot force users back into a single corridor.
       for (final z in layout.portals.map((portal) => portal.z).toSet()) {
         var position = vm.Vector3(-HomeEcosystemLayout.arcadeX, 1.6, z);
-        for (var step = 0; step < 170; step++) {
-          position = space.move(position, .1, 0);
+        final steps = (HomeEcosystemLayout.arcadeX * 2 / .1).round();
+        for (var step = 0; step < steps; step++) {
+          // Aim the final step at the destination rather than accumulating
+          // Float32 rounding beyond it; still traverse the full crosswalk.
+          final remaining = HomeEcosystemLayout.arcadeX - position.x;
+          position = space.move(position, remaining.clamp(0, .1), 0);
         }
         expect(position.x, closeTo(HomeEcosystemLayout.arcadeX, 1e-5));
       }
+    },
+  );
+
+  test(
+    'larger rooms keep furniture scale, assembly and clear wide entries',
+    () {
+      final layout = HomeEcosystemLayout(VrHomeEcosystemRoom.defaults);
+      final space = HomeWalkSpace(rooms: layout.rooms, boxes: layout.boxes);
+      final workbench = layout.boxes.singleWhere(
+        (box) => box.name == 'ecosystem_creator_workbench',
+      );
+      // The existing table remains approximately 3.14 x 1.6 m; room expansion
+      // creates walking area instead of doubling the table itself.
+      expect(workbench.width, closeTo(2.5 * 9.8 / 7.8, 1e-10));
+      expect(workbench.depth, closeTo(1.6, 1e-10));
+      for (final portal in layout.portals) {
+        expect(portal.doorHalfWidth * 2, greaterThanOrEqualTo(4.4));
+        expect(space.canStand(portal.doorX, portal.z - 1.7), isTrue);
+        expect(space.canStand(portal.doorX, portal.z + 1.7), isTrue);
+        expect(space.canStand(portal.standingX, portal.z), isTrue);
+        final backWall = layout.boxes.singleWhere(
+          (box) => box.name == 'ecosystem_${portal.room.id}_outer_wall',
+        );
+        expect((backWall.x - portal.terminalX).abs(), closeTo(.22, 1e-10));
+        final roomFloor = layout.boxes.singleWhere(
+          (box) => box.name == 'ecosystem_${portal.room.id}_floor',
+        );
+        expect(
+          roomFloor.width,
+          closeTo(portal.floor.maxX - portal.floor.minX, 1e-10),
+        );
+        expect(
+          roomFloor.depth,
+          closeTo(portal.floor.maxZ - portal.floor.minZ, 1e-10),
+        );
+      }
+      final seat = layout.boxes.singleWhere(
+        (box) => box.name == 'ecosystem_social_sofa_seat_-1.0',
+      );
+      final back = layout.boxes.singleWhere(
+        (box) => box.name == 'ecosystem_social_sofa_back_-1.0',
+      );
+      expect((seat.x - back.x).abs(), closeTo(0, 1e-10));
+      expect((seat.z - back.z).abs(), lessThan(seat.depth));
     },
   );
 

@@ -434,7 +434,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   // Open in touch-only preparation; hiding controls enters headset interaction.
   bool _hudHidden = false;
 
-  bool get _hasWorldModal => _itzliOpen || _roomController.isOpen || _optionsOpen;
+  bool get _hasWorldModal =>
+      _itzliOpen || _roomController.isOpen || _optionsOpen;
   bool get _worldModalReady =>
       _itzliPanel != null || _roomPanel != null || _optionsPanel != null;
 
@@ -536,9 +537,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
     // 2. Initialize 3D Laser Pointer for 2nd Phone Remote Controller
     _laserPointer = LaserPointerNode();
-    // The shared bottom controller shows all buttons in Home and demos.
-    // Keep only this emitter's ray, not a second miniature controller body.
-    _laserPointer.controllerMeshNode.visible = false;
+    _laserPointer.controllerMeshNode.visible = true;
     _scene.add(_laserPointer.rootNode);
 
     // 4. Initialize Hardware Services
@@ -1008,6 +1007,13 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     // and resumes must check route ownership before replacing demo captions.
     _syncControllerActions(initial: initial);
     _isRemoteConnected = _remoteController.isConnected;
+    if (_isRemoteConnected) {
+      _hudHidden = true;
+      _seedHeldRemoteButtons();
+      final showLaser = _remoteController.latestState.controllerVisible;
+      _laserPointer.visible = showLaser;
+      _laserPointer.setLaserBeamActive(showLaser);
+    }
     _arbiter.setDwellSuppressed(VrInputSource.remotePhone, _isRemoteConnected);
     _subscriptions.add(
       _remoteController.onConnectionChanged.listen((connected) {
@@ -1083,11 +1089,13 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         }
         _laserPointer.visible = _isRemoteConnected && state.controllerVisible;
         _laserPointer.setLaserBeamActive(
-          state.controllerVisible && (laserMode || hasLaserAim),
+          _isRemoteConnected && state.controllerVisible,
         );
         _laserPointer.setStickDeflection(
           hasLaserAim ? state.laserX : state.stickX,
           hasLaserAim ? state.laserY : state.stickY,
+          lookX: state.lookX,
+          lookY: state.lookY,
         );
 
         final isManipulating =
@@ -1495,7 +1503,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   }
 
   void _handleRemoteTrigger() {
-    if (!_hudHidden) return;
+    if (!_hudHidden && !_isRemoteConnected) return;
     if (_hasWorldModal) {
       _activateWorldModalFocused();
     } else {
@@ -1700,7 +1708,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
     // Home owns movement because its walls and furniture need XZ collisions.
     // The scene's generic input integration remains disabled below.
-    if (_hudHidden && !_locomotion.isJumping) {
+    if ((_hudHidden || _isRemoteConnected) && !_locomotion.isJumping) {
       final state = _remoteController.latestState;
       if (_isRemoteConnected && state.recenter && !_lastRemoteRecenter) {
         _recenterView();
@@ -1737,6 +1745,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           accelerationSeconds: 2.4,
           walkSpace: _walkSpace,
         );
+        // The controller's image UVs and acoustic echo are not a measured
+        // viewer height. Only the visor's own pose may translate its eyes.
         final room = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
         if (room != null && room.title != _currentZoneName) {
           setState(() {
@@ -1770,10 +1780,13 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       final hasLaserAim =
           state.laserX.abs() > 0.04 || state.laserY.abs() > 0.04;
       final isLaser = VrHomeRemotePointer.isPointing(state);
-      _laserPointer.setLaserBeamActive(isLaser);
+      _laserPointer.visible = state.controllerVisible;
+      _laserPointer.setLaserBeamActive(state.controllerVisible);
       _laserPointer.setStickDeflection(
         hasLaserAim ? state.laserX : state.stickX,
         hasLaserAim ? state.laserY : state.stickY,
+        lookX: state.lookX,
+        lookY: state.lookY,
       );
 
       _remotePointer.resolve(state: state, rig: _rig);
@@ -1781,7 +1794,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         cameraRig: _rig.cameraRig,
         orientation: _remotePointer.orientation,
         forwardDirection: _remotePointer.forward,
-        rangeMeters: state.rangeMeters,
+        // Acoustic echo range does not identify the other phone. Preserve
+        // the 3DoF arm model until a calibrated optical mount supplies pose.
         isTriggerPressed: state.btnA,
         dt: dt,
       );
@@ -1789,7 +1803,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       // Quest-style ray: the beam is only a short stub at the hand; the
       // target is shown by a reticle on whatever surface the ray touches.
       // The pointer's own meshes are not raycastable, so it never hits itself.
-      if (isLaser) {
+      if (state.controllerVisible) {
         final surface = _scene.raycast(
           vm.Ray.originDirection(laserOrigin, laserDir),
           maxDistance: _laserReticleRange,
@@ -1799,9 +1813,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           normal: surface?.worldNormal,
           eye: _rig.eyeCenter,
         );
-        if (_hudHidden) {
+        if (isLaser && (_hudHidden || _isRemoteConnected)) {
           _checkLaserIntersection(laserOrigin, laserDir);
-        } else {
+        } else if (!isLaser) {
           _modalLaserTriggerQueued = false;
         }
       } else {
@@ -2747,6 +2761,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                   quality: _qualityPreset,
                   enableHandTracking: false,
                   enableTempleTap: true,
+                  templeDoubleTapToRecenter: false,
                   touchFallback: true,
                   locomotionEnabled: false,
                   lookInputEnabled: false,
