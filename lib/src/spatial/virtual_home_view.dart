@@ -371,6 +371,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
   bool _isRemoteConnected = false;
   bool _remoteLaserMode = false;
+  bool _remoteLaserHitsTarget = false;
   bool _lastRemoteRecenter = false;
 
   // Interaction State
@@ -1034,6 +1035,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             }
             if (!connected) {
               _remoteLaserMode = false;
+              _remoteLaserHitsTarget = false;
               _remotePrimaryDown = false;
               _remoteBackDown = false;
               _remotePointer.reset();
@@ -1081,6 +1083,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         if (_remoteLaserMode != laserMode) {
           setState(() {
             _remoteLaserMode = laserMode;
+            _remoteLaserHitsTarget = false;
             _modalLaserTriggerQueued = false;
             _modalLaserTarget = null;
             _hoveredPedestal = null;
@@ -1241,6 +1244,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _remoteOptionsDown = state.btnR;
     _remoteLaserMode =
         _isRemoteConnected && VrHomeRemotePointer.isPointing(state);
+    _remoteLaserHitsTarget = false;
     _modalLaserTriggerQueued = false;
     _modalLaserTarget = null;
   }
@@ -1286,6 +1290,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _homeGamepad.reset();
     _gamepadMotion.reset();
     _locomotion.suspendSmoothLocomotion();
+    _remoteLaserHitsTarget = false;
     _modalLaserTriggerQueued = false;
     _modalLaserTarget = null;
   }
@@ -1506,13 +1511,24 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (!_hudHidden && !_isRemoteConnected) return;
     if (_hasWorldModal) {
       _activateWorldModalFocused();
-    } else {
-      // A selects this pose's visible target, not a card focused before walking.
-      final hit = _scene.raycast(
-        vm.Ray.originDirection(_rig.eyeCenter, _rig.forward),
-        where: _homeRaycastCandidate,
-      );
-      if (hit != null) _onSelect(hit.node);
+      return;
+    }
+    // First prefer the exact interactive target under head gaze.
+    final hit = _scene.raycast(
+      vm.Ray.originDirection(_rig.eyeCenter, _rig.forward),
+      where: _homeRaycastCandidate,
+    );
+    if (hit != null && !_worldBuilder.blocksPointer(hit.node)) {
+      _onSelect(hit.node);
+      return;
+    }
+    // When facing the Library panel (for example when un-reticled head gaze
+    // rests on a card frame, gap, title or panel background), A activates the
+    // highlighted card/action without ever opening a stale card after walking away.
+    final library = _library;
+    if (library != null && _isLibraryInFrontOfViewer()) {
+      _bindings.onSound?.call(VrHomeSound.open);
+      library.activateFocused();
     }
   }
 
@@ -1816,10 +1832,20 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         if (isLaser && (_hudHidden || _isRemoteConnected)) {
           _checkLaserIntersection(laserOrigin, laserDir);
         } else if (!isLaser) {
+          if (_remoteLaserHitsTarget) {
+            setState(() => _remoteLaserHitsTarget = false);
+          }
           _modalLaserTriggerQueued = false;
         }
       } else {
+        if (_remoteLaserHitsTarget) {
+          setState(() => _remoteLaserHitsTarget = false);
+        }
         _laserPointer.setHit(point: null, eye: _rig.eyeCenter);
+        if (_modalLaserTriggerQueued) {
+          _modalLaserTriggerQueued = false;
+          _handleRemoteTrigger();
+        }
       }
     }
   }
@@ -1833,11 +1859,20 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             )
           : null;
       _modalLaserTarget = hit?.node;
-      _handleWorldModalHover(_modalLaserTarget);
+      final target = _modalLaserTarget;
+      if (_remoteLaserHitsTarget != (target != null)) {
+        setState(() => _remoteLaserHitsTarget = target != null);
+      }
+      if (target != null) {
+        _handleWorldModalHover(target);
+      }
       if (_modalLaserTriggerQueued) {
         _modalLaserTriggerQueued = false;
-        final target = _modalLaserTarget;
-        if (target != null) _handleWorldModalSelect(target);
+        if (target != null) {
+          _handleWorldModalSelect(target);
+        } else {
+          _activateWorldModalFocused();
+        }
       }
       return;
     }
@@ -1847,12 +1882,32 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         vm.Ray.originDirection(origin, dir),
         where: _homeRaycastCandidate,
       );
-      _library?.hover(hit?.node);
-      final room = _worldBuilder.roomFor(hit?.node);
-      if (room != null) _announceRoom(room);
+      final interactiveNode =
+          (hit != null && !_worldBuilder.blocksPointer(hit.node))
+          ? hit.node
+          : null;
+      if (_remoteLaserHitsTarget != (interactiveNode != null)) {
+        setState(() => _remoteLaserHitsTarget = interactiveNode != null);
+      }
+      if (interactiveNode != null) {
+        _library?.hover(interactiveNode);
+        final room = _worldBuilder.roomFor(interactiveNode);
+        if (room != null) _announceRoom(room);
+        final exhibit = _worldBuilder.exhibitFor(interactiveNode);
+        if (exhibit != null) {
+          final message = '${exhibit.title} · A: abrir experiencia';
+          if (_statusMessage != message) {
+            setState(() => _statusMessage = message);
+          }
+        }
+      }
       if (_modalLaserTriggerQueued) {
         _modalLaserTriggerQueued = false;
-        if (hit != null) _onSelect(hit.node);
+        if (interactiveNode != null) {
+          _onSelect(interactiveNode);
+        } else {
+          _handleRemoteTrigger();
+        }
       }
       return;
     }
@@ -1970,9 +2025,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   // ─── Gaze & Selection Handlers ─────────────────────────────────────
 
   void _onHover(Node? node) {
-    // The laser owns pointing while its mode is selected. Gaze callbacks must
-    // not overwrite the controller target between its pose and trigger.
-    if (_isRemoteConnected && _remoteLaserMode) return;
+    // The laser owns pointing only while actively hitting an interactive target.
+    // Holding the phone flat as a gamepad yields hover back to head gaze.
+    if (shouldLaserOwnHomeHover(
+      isRemoteConnected: _isRemoteConnected,
+      remoteLaserMode: _remoteLaserMode,
+      remoteLaserHitsTarget: _remoteLaserHitsTarget,
+    )) {
+      return;
+    }
     if (_hasWorldModal) {
       _handleWorldModalHover(node);
       final label = _worldModalFocusedLabel;
@@ -2053,6 +2114,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _handleWorldModalSelect(node);
       return;
     }
+    if (_worldBuilder.blocksPointer(node)) return;
     _bindings.onSound?.call(VrHomeSound.open);
     final room = _worldBuilder.roomFor(node);
     if (room != null) {
@@ -2139,6 +2201,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (!mounted || _isEnteringDemo || _isDemoActive) return;
     _isEnteringDemo = true;
     _locomotion.suspendSmoothLocomotion();
+    _remoteLaserHitsTarget = false;
     _modalLaserTriggerQueued = false;
     _modalLaserTarget = null;
     setState(() {
@@ -2198,7 +2261,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   bool _gazeFilter(Node node) {
     if (!_hudHidden) return false; // Preparation controls are touch-only 2D UI.
     if (_hasWorldModal) return _worldModalOwnsInteractiveNode(node);
-    final blockedId = _portalRearm.blockedId;
+    // Timed gaze dwell is disabled while a remote controller is connected, so
+    // re-arm blocking must not hide a card from explicit button A re-entry.
+    final blockedId = _isRemoteConnected ? null : _portalRearm.blockedId;
     if (_worldBuilder.blocksPointer(node)) return true;
     final exhibit = _worldBuilder.exhibitFor(node);
     if (exhibit != null) return exhibit.demoId != blockedId;
@@ -2766,7 +2831,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                   locomotionEnabled: false,
                   lookInputEnabled: false,
                   gazeEnabled:
-                      _hudHidden && !(_isRemoteConnected && _remoteLaserMode),
+                      _hudHidden &&
+                      !shouldLaserOwnHomeHover(
+                        isRemoteConnected: _isRemoteConnected,
+                        remoteLaserMode: _remoteLaserMode,
+                        remoteLaserHitsTarget: _remoteLaserHitsTarget,
+                      ),
                   showReticle:
                       _hudHidden &&
                       !_assistantCapturing &&

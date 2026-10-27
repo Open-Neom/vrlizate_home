@@ -22,6 +22,19 @@ bool shouldRevealHomePreparationOnMiss({
   required bool hasWorldModal,
 }) => controlsHidden && !hasWorldModal;
 
+/// Returns `true` only when a connected remote phone is actively pointing its
+/// 3DoF/touch laser ray AND that ray intersects an interactive Home target.
+///
+/// When the user holds the 2nd phone flat like a gamepad (even if 1-hand laser
+/// auto-switched or `laserX`/`laserY` retained an earlier offset) so the laser
+/// ray misses interactive cards/modals, head gaze continues to hover and button
+/// `A` falls back to head-gaze / focused-library-card activation.
+bool shouldLaserOwnHomeHover({
+  required bool isRemoteConnected,
+  required bool remoteLaserMode,
+  required bool remoteLaserHitsTarget,
+}) => isRemoteConnected && remoteLaserMode && remoteLaserHitsTarget;
+
 /// The reference driver encodes X/Y/L2 as `trigger` plus a button payload.
 /// Reserve these events before the scene interprets a generic primary action.
 class VrHomeGamepadPolicy {
