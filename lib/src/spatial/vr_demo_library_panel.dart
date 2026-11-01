@@ -318,12 +318,13 @@ class VrDemoLibraryPanel {
         ? channel / 12.92
         : math.pow((channel + .055) / 1.055, 2.4).toDouble();
     final material = UnlitMaterial()
+      ..alphaMode = AlphaMode.blend
       ..vertexColorWeight = 0
       ..baseColorFactor = vm.Vector4(
         linear(color.r),
         linear(color.g),
         linear(color.b),
-        1,
+        0.64,
       );
     return Node(mesh: Mesh(CuboidGeometry(vm.Vector3(w, h, d)), material));
   }

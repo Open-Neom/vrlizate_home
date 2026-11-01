@@ -14,6 +14,7 @@ import '../../utils/constants/vr_home_constants.dart';
 import '../../utils/constants/vr_home_translation_constants.dart';
 import 'laser_pointer_node.dart';
 import 'demo_preview_data.dart';
+import 'home_ecosystem_layout.dart';
 import 'home_spatial_metrics.dart';
 import 'home_walk_space.dart';
 import 'home_showcase.dart';
@@ -245,6 +246,12 @@ Future<VrWorldActionPanel3D> createVrHomeOptionsPanel({
         label: VrHomeTranslationConstants.optionsMallPlazaLabel,
         onPressed: () => onAction('rooms'),
       ),
+    for (final (extraId, extraLabel) in bindings.extraDockActions)
+      VrWorldAction(
+        id: extraId,
+        label: extraLabel,
+        onPressed: () => onAction(extraId),
+      ),
     if (bindings.onOpenSpatialSettings != null)
       VrWorldAction(
         id: VrHomeConstants.spatialSettingsActionId,
@@ -461,11 +468,16 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   void initState() {
     super.initState();
     _hudHidden = widget.startInHeadsetMode;
+    _libraryHiddenByUser = _bindings.startWithLibraryHidden;
     _qualityPreset = _bindings.initialQuality;
     _worldBuilder = VirtualHomeWorldBuilder(
       exhibits: _bindings.exhibits,
       ecosystemRooms: _expandedEcosystemRooms,
       worldObjects: _bindings.worldObjects,
+      plazaTopology: _bindings.plazaTopology,
+      customEcosystemLayout: _bindings.customEcosystemLayout,
+      includeLobbyBackdrop: _bindings.includeLobbyBackdrop,
+      plazaBannerText: _bindings.plazaBannerText,
       theme: widget.theme,
     );
     _walkSpace = HomeWalkSpace(
@@ -478,7 +490,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _foreground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    _rig = StereoHeadRig(eyeCenter: vm.Vector3(0, 1.60, 0));
+    _rig = StereoHeadRig(
+      eyeCenter: _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.60, 0),
+    );
     _arbiter = VrInputArbiter();
 
     // 0. Attach Reference Gamepad Driver & Physical Hardware Adapter
@@ -586,6 +600,13 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
               widget.bindings.roomChanges,
             ) ||
             !identical(oldWidget.bindings.exhibits, widget.bindings.exhibits) ||
+            !identical(
+              oldWidget.bindings.customEcosystemLayout,
+              widget.bindings.customEcosystemLayout,
+            ) ||
+            oldWidget.bindings.plazaTopology != widget.bindings.plazaTopology ||
+            oldWidget.bindings.plazaBannerText !=
+                widget.bindings.plazaBannerText ||
             oldWidget.bindings.ecosystemRooms.length !=
                 widget.bindings.ecosystemRooms.length ||
             oldWidget.bindings.catalog.entries.length !=
@@ -624,14 +645,26 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         exhibits: _bindings.exhibits,
         ecosystemRooms: _expandedEcosystemRooms,
         worldObjects: _bindings.worldObjects,
+        plazaTopology: _bindings.plazaTopology,
+        customEcosystemLayout: _bindings.customEcosystemLayout,
+        includeLobbyBackdrop: _bindings.includeLobbyBackdrop,
+        plazaBannerText: _bindings.plazaBannerText,
         theme: widget.theme,
       );
       _walkSpace = HomeWalkSpace(
         rooms: _worldBuilder.ecosystemLayout.rooms,
         boxes: _worldBuilder.ecosystemLayout.boxes,
       );
-      if (!_walkSpace.canStand(_rig.eyeCenter.x, _rig.eyeCenter.z)) {
-        _rig.eyeCenter = vm.Vector3(0, 1.6, 0);
+      final customChanged = !identical(
+        oldWidget.bindings.customEcosystemLayout,
+        widget.bindings.customEcosystemLayout,
+      );
+      if (customChanged && _bindings.initialEyePosition != null) {
+        _rig.eyeCenter = _bindings.initialEyePosition!.clone();
+        _locomotion.cancelJump();
+      } else if (!_walkSpace.canStand(_rig.eyeCenter.x, _rig.eyeCenter.z)) {
+        _rig.eyeCenter =
+            _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.6, 0);
         _locomotion.cancelJump();
       }
       _bindHost(openPairing: _pendingInitialPairing);
@@ -685,7 +718,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
               ),
         dockActions: [
           ('library', 'Biblioteca'),
-          if (_expandedEcosystemRooms.isNotEmpty) ('rooms', 'Salas'),
+          if (_worldBuilder.ecosystemLayout.portals.isNotEmpty)
+            ('rooms', 'Salas'),
+          ..._bindings.extraDockActions,
           (
             VrHomeConstants.optionsActionId,
             VrHomeTranslationConstants.optionsDockLabel,
@@ -741,18 +776,26 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           return;
         }
         _locomotion.suspendSmoothLocomotion();
+        final destination = _bindings.customEcosystemLayout != null
+            ? (_bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.6, 0))
+            : _bindings.plazaTopology == HomePlazaTopology.distributedCruciform
+            ? vm.Vector3(0, 1.6, HomeEcosystemLayout.cruciformCenterZ)
+            : vm.Vector3(
+                0,
+                1.6,
+                _worldBuilder.ecosystemLayout.portals.first.z + 2,
+              );
         _locomotion.startJump(
           from: _rig.eyeCenter,
-          to: vm.Vector3(
-            0,
-            1.6,
-            _worldBuilder.ecosystemLayout.portals.first.z + 2,
-          ),
-          targetName: 'Plaza de experiencias',
+          to: destination,
+          targetName:
+              _bindings.plazaTopology == HomePlazaTopology.distributedCruciform
+              ? 'Gran Crucero Central (4 Alas)'
+              : 'Plaza de experiencias',
         );
         setState(() {
           _hudHidden = true;
-          _statusMessage = 'Entrando a la plaza de experiencias';
+          _statusMessage = 'Entrando al centro distribuido de la plaza';
         });
       case VrHomeConstants.optionsActionId:
         _showOptionsPanel();
@@ -781,18 +824,36 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           );
           return;
         }
+        var safeDist = placement.distance;
+        final archHit = _scene.raycast(
+          vm.Ray.originDirection(_rig.eyeCenter, placement.forward),
+          maxDistance: safeDist + 0.45,
+          where: _worldBuilder.blocksPointer,
+        );
+        if (archHit != null) {
+          if (archHit.distance < 1.55) {
+            setState(
+              () => _statusMessage =
+                  'Estructura cercana · Usa el Menú Sutil Flotante (L) o aléjate',
+            );
+            return;
+          }
+          safeDist = math.min(safeDist, archHit.distance - 0.38);
+        }
         _libraryHiddenByUser = false;
         _library?.place(
           VrWorldPose.fromViewer(
             eye: _rig.eyeCenter,
             forward: placement.forward,
-            distance: placement.distance,
+            distance: safeDist,
           ),
         );
         setState(
           () => _statusMessage =
               'Biblioteca colocada aquí · No seguirá tu cabeza',
         );
+      default:
+        _bindings.onCustomDockAction?.call(context, action);
     }
   }
 
@@ -1619,7 +1680,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       });
       return;
     }
-    // Library replaces locomotion between wings; old voice actions still work.
+    // Sync library category tab AND perform physical parabolic jump to the wing.
     if (_library != null) {
       final category = switch (id) {
         'north_games' => VrDemoLibraryCategory.games,
@@ -1629,7 +1690,6 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         _ => VrDemoLibraryCategory.featured,
       };
       _library!.setCategory(category);
-      return;
     }
     final wp = _worldBuilder.waypoints.firstWhere(
       (w) => w.id == id,
@@ -2123,6 +2183,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     }
     final exhibit = _worldBuilder.exhibitFor(node);
     if (exhibit != null) {
+      if (_bindings.onExhibitSelected?.call(context, exhibit) == true) {
+        return;
+      }
       _openDemoById(exhibit.demoId, exhibit.title);
       return;
     }
@@ -2212,6 +2275,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
     Object? openError;
     try {
+      // Allow the host to fade in a subtle translucent portal veil over both
+      // eyes BEFORE suspending Home's 3D GPU surface so there is zero black flash.
+      if (_bindings.onBeforeSuspendForLaunch != null) {
+        await _bindings.onBeforeSuspendForLaunch!(context, data);
+        if (!mounted) return;
+      }
       // The Home owns a live flutter_scene surface and head tracker.
       // Release those producers before creating a demo surface so a
       // low-memory Android phone never renders two VR worlds concurrently.
@@ -2240,6 +2309,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           _hoveredWaypoint = null;
         });
         _resumeHomeProducers();
+        _bindings.onAfterResumeFromLaunch?.call();
       }
     }
   }
@@ -2490,6 +2560,11 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       case 'calibrate':
         _dismissOptionsPanel(announce: false, haptic: false);
         _libraryAction('calibrate');
+      default:
+        if (_bindings.onCustomDockAction != null) {
+          _dismissOptionsPanel(announce: false, haptic: false);
+          _bindings.onCustomDockAction!.call(context, actionId);
+        }
     }
   }
 

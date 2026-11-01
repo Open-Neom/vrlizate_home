@@ -39,6 +39,10 @@ class VrHomeEcosystemRoom {
     required this.icon,
     required this.purpose,
     this.targetRouteId,
+    this.isForLease = false,
+    this.boothCode,
+    this.doorBadge,
+    this.terminalActionLabel,
   });
 
   const VrHomeEcosystemRoom.portableWorld({
@@ -47,16 +51,42 @@ class VrHomeEcosystemRoom {
     String? description,
     this.accent = VrHomeConstants.portableWorldDefaultAccent,
     this.targetRouteId,
+    this.isForLease = false,
+    this.boothCode,
+    this.doorBadge,
+    this.terminalActionLabel,
   }) : description =
            description ?? VrHomeTranslationConstants.portableWorldDefaultSubtitle,
        icon = VrHomeRoomIcon.world,
        purpose = VrHomeRoomPurpose.portableWorld;
+
+  /// Commercial storefront ("puesto / local") currently available for rent to
+  /// host a `.vrlz` or `.vrlw` experience inside a Famous Mall / Plaza.
+  const VrHomeEcosystemRoom.forLease({
+    required this.id,
+    required this.title,
+    required this.description,
+    required String this.boothCode,
+    this.accent = 0xFFF59E0B,
+    this.targetRouteId,
+    String? doorBadge,
+    String? terminalActionLabel,
+  }) : icon = VrHomeRoomIcon.studio,
+       purpose = VrHomeRoomPurpose.creation,
+       isForLease = true,
+       doorBadge = doorBadge ?? 'EN RENTA · ESPACIO .VRLZ',
+       terminalActionLabel =
+           terminalActionLabel ?? 'A · Ficha en renta / Demo';
 
   final String id, title, description;
   final int accent;
   final VrHomeRoomIcon icon;
   final VrHomeRoomPurpose purpose;
   final String? targetRouteId;
+  final bool isForLease;
+  final String? boothCode;
+  final String? doorBadge;
+  final String? terminalActionLabel;
 
   /// Dynamically expands the Mall room inventory with a dedicated 3D storefront
   /// ("local") for every `.vrlw` / `worlds` entry in [catalogEntries].
@@ -102,6 +132,20 @@ class VrHomeEcosystemRoom {
     accent: 0xFFB6A0FF,
     icon: VrHomeRoomIcon.gamepad,
     purpose: VrHomeRoomPurpose.openSourceGames,
+  );
+
+  /// Opt-in gateway to architectural digital-twin Plazas & Famous Malls where
+  /// each booth hosts a VR experience and vacant booths are marked "EN RENTA".
+  static const famousMalls = VrHomeEcosystemRoom(
+    id: 'famous_malls',
+    title: 'Plazas y Malls Famosos',
+    description:
+        'Duplicados 3D de Milán, Artz México, Dubái y Marina Bay con puestos VR y espacios EN RENTA.',
+    accent: 0xFFF59E0B,
+    icon: VrHomeRoomIcon.world,
+    purpose: VrHomeRoomPurpose.creation,
+    doorBadge: 'PLAZAS VR · LOCALES EN RENTA',
+    terminalActionLabel: 'A · Viajar a Plazas Famosas',
   );
 
   static const defaults = <VrHomeEcosystemRoom>[

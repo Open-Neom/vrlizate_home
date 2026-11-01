@@ -40,13 +40,22 @@ class VirtualHomeWorldBuilder {
     Iterable<VrHomeEcosystemRoom> ecosystemRooms = const [],
     this.theme = VrHomeThemeData.aurora,
     Iterable<VrWorldEntity>? worldObjects,
+    HomePlazaTopology plazaTopology = HomePlazaTopology.boulevard,
+    HomeEcosystemLayout? customEcosystemLayout,
+    this.includeLobbyBackdrop = true,
+    this.plazaBannerText,
   }) : exhibits = List<HomeExhibit>.unmodifiable(exhibits),
-       ecosystemLayout = HomeEcosystemLayout(
-         ecosystemRooms,
-         worldObjects: worldObjects,
-       );
+       ecosystemLayout =
+           customEcosystemLayout ??
+           HomeEcosystemLayout(
+             ecosystemRooms,
+             worldObjects: worldObjects,
+             topology: plazaTopology,
+           );
   final List<HomeExhibit> exhibits;
   final HomeEcosystemLayout ecosystemLayout;
+  final bool includeLobbyBackdrop;
+  final String? plazaBannerText;
   VrHomeThemeData theme;
   final List<FloorWaypoint> waypoints = [];
 
@@ -124,7 +133,9 @@ class VirtualHomeWorldBuilder {
       shadowMapResolution: shadowMapResolution,
     );
     _setupArchitecture(root);
-    _setupPanorama(root);
+    if (includeLobbyBackdrop) {
+      _setupPanorama(root);
+    }
     _setupWaypoints(root);
     _setupExhibits(root);
     _setupEcosystem(root);
@@ -181,24 +192,26 @@ class VirtualHomeWorldBuilder {
         )
         ..localTransform = vm.Matrix4.translation(vm.Vector3(3, 7, -8)),
     );
-    for (final room in HomeLobbyLayout.rooms.skip(1)) {
-      root.add(
-        Node(name: '${room.id}_fill')
-          ..addComponent(
-            PointLightComponent(
-              PointLight(
-                color: vm.Vector3(0.98, 0.96, 0.91),
-                intensity: 2.5,
-                range: 8,
+    if (includeLobbyBackdrop) {
+      for (final room in HomeLobbyLayout.rooms.skip(1)) {
+        root.add(
+          Node(name: '${room.id}_fill')
+            ..addComponent(
+              PointLightComponent(
+                PointLight(
+                  color: vm.Vector3(0.98, 0.96, 0.91),
+                  intensity: 2.5,
+                  range: 8,
+                ),
               ),
+            )
+            ..localTransform = vm.Matrix4.translationValues(
+              (room.minX + room.maxX) / 2,
+              3.8,
+              (room.minZ + room.maxZ) / 2,
             ),
-          )
-          ..localTransform = vm.Matrix4.translationValues(
-            (room.minX + room.maxX) / 2,
-            3.8,
-            (room.minZ + room.maxZ) / 2,
-          ),
-      );
+        );
+      }
     }
     for (final portal in ecosystemLayout.portals) {
       final fill = Color.lerp(Colors.white, Color(portal.room.accent), .18)!;
@@ -216,7 +229,7 @@ class VirtualHomeWorldBuilder {
           ..localTransform = vm.Matrix4.translationValues(
             portal.roomCenterX,
             3.8,
-            portal.z,
+            portal.roomCenterZ,
           ),
       );
     }
@@ -400,12 +413,17 @@ class VirtualHomeWorldBuilder {
       final terminal =
           Node(
               name: 'ecosystem_${room.id}_terminal',
-              mesh: Mesh(CuboidGeometry(vm.Vector3(.14, 1.45, 2.3)), accent),
+              mesh: Mesh(
+                CuboidGeometry(
+                  vm.Vector3(portal.terminalWidth, 1.45, portal.terminalDepth),
+                ),
+                accent,
+              ),
             )
             ..localTransform = vm.Matrix4.translationValues(
               portal.terminalX,
               1.75,
-              portal.z,
+              portal.terminalZ,
             );
       root.add(terminal);
       _rooms[terminal] = room;
@@ -622,6 +640,7 @@ class VirtualHomeWorldBuilder {
             0,
           );
         case 'rotunda_openworld':
+        case 'mall_directory':
           for (final side in const [-1.0, 1.0]) {
             part(
               'arch_pillar_$side',
@@ -668,8 +687,11 @@ class VirtualHomeWorldBuilder {
       await Scene.initializeStaticResources();
       if (!Scene.isReadyToRender || generation != _generation) return;
       for (final exhibit in exhibits) {
+        final actionHint = exhibit.id == 'mall_directory'
+            ? 'A · Cambiar de Plaza Famosa'
+            : 'A · Abrir experiencia';
         final label = await VrTextLabel.create(
-          '${exhibit.title}\nA · Abrir experiencia',
+          '${exhibit.title}\n$actionHint',
           center: vm.Vector3.zero(),
           height: 0.28,
           maxLines: 2,
@@ -689,11 +711,14 @@ class VirtualHomeWorldBuilder {
       }
       for (final portal in ecosystemLayout.portals) {
         final identity = HomeRoomIdentity.forPurpose(portal.room.purpose);
+        final doorSubtitle = portal.room.doorBadge ?? identity.category;
+        final terminalAction =
+            portal.room.terminalActionLabel ?? 'A · Explorar en VR';
         for (final atDoor in const [true, false]) {
           final label = await _createRoomSign(
             atDoor
-                ? '${portal.room.title}\n${identity.category}'
-                : '${portal.room.title}\nA · Explorar en VR',
+                ? '${portal.room.title}\n$doorSubtitle'
+                : '${portal.room.title}\n$terminalAction',
             height: atDoor ? .50 : .58,
             maxWorldWidth: atDoor ? 3.12 : 2.04,
             maxLines: 2,
@@ -705,7 +730,7 @@ class VirtualHomeWorldBuilder {
               vm.Matrix4.translationValues(
                   atDoor ? portal.signX : portal.terminalX,
                   atDoor ? 3.55 : 1.85,
-                  portal.z,
+                  atDoor ? portal.signZ : portal.terminalZ,
                 )
                 ..rotateY(portal.yaw)
                 ..translateByVector3(vm.Vector3(0, 0, .16))
@@ -733,41 +758,62 @@ class VirtualHomeWorldBuilder {
           ..raycastable = false
           ..shadowCastingMode = ShadowCastingMode.off
           ..localTransform =
-              (vm.Matrix4.translationValues(portal.terminalX, 2.675, portal.z)
+              (vm.Matrix4.translationValues(
+                  portal.terminalX,
+                  2.675,
+                  portal.terminalZ,
+                )
                 ..rotateY(portal.yaw)
                 ..translateByVector3(vm.Vector3(0, 0, .17))
                 ..rotateX(math.pi / 2)
                 ..scaleByVector3(vm.Vector3(-1, 1, 1)));
         root.add(proposal.node);
       }
-      if (ecosystemLayout.portals.isNotEmpty) {
+      if (includeLobbyBackdrop) {
+        if (ecosystemLayout.portals.isNotEmpty) {
+          final sign = await _createRoomSign(
+            plazaBannerText ?? 'PLAZA VRLIZATE\nExplora sus espacios',
+            height: .42,
+            maxWorldWidth: 2.1,
+            maxLines: 2,
+            maxWidthPx: 1300,
+            name: 'ecosystem_wing_sign',
+          );
+          if (generation != _generation) return;
+          sign.node.localTransform = vm.Matrix4.translationValues(0, 3.7, 12.34)
+            ..rotateY(math.pi)
+            ..rotateX(math.pi / 2)
+            ..scaleByVector3(vm.Vector3(-1, 1, 1));
+          sign.node.raycastable = false;
+          root.add(sign.node);
+        }
+        final instructions = await VrTextLabel.create(
+          ecosystemLayout.portals.isEmpty
+              ? 'Explora las salas · Stick izquierdo: caminar · Derecho: mirar · A: elegir'
+              : 'Plaza: detrás de la galería · Stick izquierdo: caminar · A: elegir',
+          center: vm.Vector3(0, 3.25, -5.0),
+          height: 0.12,
+          maxWidthPx: 2200,
+          name: 'home_walk_instructions',
+        );
+        instructions.node.shadowCastingMode = ShadowCastingMode.off;
+        if (generation == _generation) root.add(instructions.node);
+      } else if (plazaBannerText != null) {
         final sign = await _createRoomSign(
-          'PLAZA VRLIZATE\nExplora sus espacios',
-          height: .42,
-          maxWorldWidth: 2.1,
+          plazaBannerText!,
+          height: .72,
+          maxWorldWidth: 5.8,
           maxLines: 2,
-          maxWidthPx: 1300,
+          maxWidthPx: 2000,
           name: 'ecosystem_wing_sign',
         );
         if (generation != _generation) return;
-        sign.node.localTransform = vm.Matrix4.translationValues(0, 3.7, 12.34)
-          ..rotateY(math.pi)
+        sign.node.localTransform = vm.Matrix4.translationValues(0, 5.55, -17.35)
           ..rotateX(math.pi / 2)
           ..scaleByVector3(vm.Vector3(-1, 1, 1));
         sign.node.raycastable = false;
         root.add(sign.node);
       }
-      final instructions = await VrTextLabel.create(
-        ecosystemLayout.portals.isEmpty
-            ? 'Explora las salas · Stick izquierdo: caminar · Derecho: mirar · A: elegir'
-            : 'Plaza: detrás de la galería · Stick izquierdo: caminar · A: elegir',
-        center: vm.Vector3(0, 3.25, -5.0),
-        height: 0.12,
-        maxWidthPx: 2200,
-        name: 'home_walk_instructions',
-      );
-      instructions.node.shadowCastingMode = ShadowCastingMode.off;
-      if (generation == _generation) root.add(instructions.node);
     } catch (error) {
       // Geometry remains usable if optional labels cannot allocate GPU text.
       debugPrint('Home room labels unavailable: $error');

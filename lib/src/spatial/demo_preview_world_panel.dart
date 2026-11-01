@@ -157,7 +157,8 @@ class DemoPreviewWorldPanel {
   }) async {
     final accent = vm.Vector4(data.color.r, data.color.g, data.color.b, 1);
     final plateMaterial = PhysicallyBasedMaterial()
-      ..baseColorFactor = vm.Vector4(0.025, 0.035, 0.075, 0.98)
+      ..alphaMode = AlphaMode.blend
+      ..baseColorFactor = vm.Vector4(0.025, 0.035, 0.075, 0.68)
       ..metallicFactor = 0.55
       ..roughnessFactor = 0.22
       ..emissiveFactor = vm.Vector4(

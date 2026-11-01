@@ -1,5 +1,9 @@
 # Workspace development. Applications select their own package sources.
 dependency_overrides:
+  flutter_webrtc:
+    path: ../vrlizate_cast/third_party/flutter_webrtc
+  camera_android_camerax:
+    path: ../vrlizate_joystick/third_party/camera_android_camerax
   vrlizate_avatar:
     path: ../vrlizate_avatar
   vrlizate_cast:

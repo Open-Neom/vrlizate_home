@@ -5,7 +5,10 @@ import 'package:vrlizate_world/vrlizate_world.dart';
 import 'package:vrlizate_scene/vrlizate_scene.dart';
 import 'package:vrlizate_joystick/vrlizate_joystick.dart';
 
+import 'package:vector_math/vector_math.dart' as vm;
+
 import 'demo_preview_data.dart';
+import 'home_ecosystem_layout.dart';
 import 'home_lobby_layout.dart';
 import 'vr_demo_library_model.dart';
 import '../ecosystem/vr_home_ecosystem_room.dart';
@@ -75,6 +78,8 @@ class VrHomeSpatialBindings {
     required this.catalog,
     required this.remoteController,
     required this.onLaunch,
+    this.onBeforeSuspendForLaunch,
+    this.onAfterResumeFromLaunch,
     this.ready,
     this.onPair,
     this.onExit,
@@ -104,11 +109,21 @@ class VrHomeSpatialBindings {
     this.initialQuality = VrQualityPreset.medium,
     this.calibrationExperienceId,
     this.assistantTitle = 'Asistente espacial',
+    this.plazaTopology = HomePlazaTopology.boulevard,
+    this.customEcosystemLayout,
+    this.includeLobbyBackdrop = true,
+    this.plazaBannerText,
+    this.initialEyePosition,
+    this.startWithLibraryHidden = false,
+    this.onExhibitSelected,
+    this.onCustomDockAction,
+    Iterable<(String, String)> extraDockActions = const [],
     Iterable<VrHomePrompt> prompts = const [],
     Iterable<HomeExhibit> exhibits = const [],
     List<VrHomeEcosystemRoom> ecosystemRooms = const [],
     Iterable<VrWorldEntity>? worldObjects,
-  }) : prompts = List<VrHomePrompt>.unmodifiable(prompts),
+  }) : extraDockActions = List<(String, String)>.unmodifiable(extraDockActions),
+       prompts = List<VrHomePrompt>.unmodifiable(prompts),
        exhibits = List<HomeExhibit>.unmodifiable(exhibits),
        ecosystemRooms = List<VrHomeEcosystemRoom>.unmodifiable(ecosystemRooms),
        worldObjects = worldObjects == null
@@ -125,6 +140,9 @@ class VrHomeSpatialBindings {
   /// this operation and cannot cancel it when a route is closed.
   final Future<void>? ready;
   final Future<void> Function(BuildContext, DemoPreviewData) onLaunch;
+  final Future<void> Function(BuildContext, DemoPreviewData)?
+  onBeforeSuspendForLaunch;
+  final VoidCallback? onAfterResumeFromLaunch;
   final Future<bool> Function(BuildContext)? onPair;
   final void Function(BuildContext)? onExit;
   final Future<VrHomeCatalogExit?> Function(BuildContext)? onCatalog;
@@ -189,6 +207,15 @@ class VrHomeSpatialBindings {
   final VrQualityPreset initialQuality;
   final String? calibrationExperienceId;
   final String assistantTitle;
+  final HomePlazaTopology plazaTopology;
+  final HomeEcosystemLayout? customEcosystemLayout;
+  final bool includeLobbyBackdrop;
+  final String? plazaBannerText;
+  final vm.Vector3? initialEyePosition;
+  final bool startWithLibraryHidden;
+  final bool Function(BuildContext, HomeExhibit)? onExhibitSelected;
+  final void Function(BuildContext, String actionId)? onCustomDockAction;
+  final List<(String, String)> extraDockActions;
   final List<VrHomePrompt> prompts;
   final List<HomeExhibit> exhibits;
   final List<VrHomeEcosystemRoom> ecosystemRooms;
