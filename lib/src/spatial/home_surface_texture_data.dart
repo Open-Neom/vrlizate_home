@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:vrlizate_scene/vrlizate_scene.dart' show VrToksvigFilter;
+
 /// Small, seamless neutral finishes. The authored room color remains in the
 /// mesh; the texture contributes grain, normal relief, roughness variation,
 /// and glTF ORM micro-cavity ambient occlusion rather than replacing the room palette.
@@ -141,7 +143,14 @@ class HomeSurfaceTextureData {
         normal[p + 3] = 255;
       }
     }
-    return HomeSurfaceTextureData(size, color, normal, roughness);
+    final filteredOrm = VrToksvigFilter.regularizeBaseOrmRoughness(
+      normalRgba: normal,
+      ormRgba: roughness,
+      width: size,
+      height: size,
+      strength: 0.45,
+    );
+    return HomeSurfaceTextureData(size, color, normal, filteredOrm);
   }
 
   static double _smoothstep(double a, double b, double x) {
