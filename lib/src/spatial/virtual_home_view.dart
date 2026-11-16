@@ -2608,13 +2608,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     unawaited(
       library.moveFocus(direction).then((_) {
         if (!mounted) return;
-        final focused = library.state.catalog.resolveRoute(
-          library.state.focusedId ?? '',
-        );
-        if (focused != null) {
-          setState(
-            () => _statusMessage = '${focused.title} · Pulsa A para abrir',
-          );
+        final label = library.focusedLabel;
+        if (label != null) {
+          setState(() => _statusMessage = '$label · Pulsa A para seleccionar');
         }
       }),
     );

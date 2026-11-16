@@ -6,6 +6,7 @@ export 'src/ecosystem/vr_home_room_presentation.dart';
 export 'src/ecosystem/vr_home_room_content.dart';
 export 'src/spatial/home_ecosystem_layout.dart';
 export 'src/spatial/home_famous_mall_layout.dart';
+export 'src/spatial/home_plaza_crowd.dart';
 export 'src/spatial/home_showcase.dart';
 export 'src/spatial/demo_preview_data.dart';
 export 'src/spatial/demo_preview_world_panel.dart';

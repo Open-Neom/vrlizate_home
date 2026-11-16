@@ -244,9 +244,22 @@ class VrDemoLibraryPanel {
   bool _disposed = false, _busy = false;
   String? _hoveredRoute;
   VoidCallback? _hoveredAction;
+  String _zone = 'cards'; // 'categories' | 'cards' | 'dock'
+  int _focusedCategoryIndex = 0;
+  int _focusedDockIndex = 0;
 
   bool get busy => _busy;
   String? get hoveredRoute => _hoveredRoute;
+  String? get focusedLabel {
+    if (_zone == 'categories') {
+      return 'Categoría: ${VrDemoLibraryCategory.values[_focusedCategoryIndex.clamp(0, VrDemoLibraryCategory.values.length - 1)].label}';
+    }
+    if (_zone == 'dock' && dockActions.isNotEmpty) {
+      return 'Acción: ${dockActions[_focusedDockIndex.clamp(0, dockActions.length - 1)].$2}';
+    }
+    final entry = state.catalog.resolveRoute(state.focusedId ?? '');
+    return entry?.title;
+  }
   vm.Vector3 get worldPosition => root.localTransform.getTranslation();
   bool owns(Node node) =>
       !_disposed && !busy && root.visible && _actions.containsKey(node);
@@ -473,7 +486,10 @@ class VrDemoLibraryPanel {
           .65,
           .19,
           () => setCategory(category),
-          selected: state.category == category,
+          route: 'cat:${category.name}',
+          selected: _zone == 'categories'
+              ? i == _focusedCategoryIndex
+              : state.category == category,
         );
       }
       for (var i = 0; i < state.pageEntries.length; i++) {
@@ -495,7 +511,7 @@ class VrDemoLibraryPanel {
           .63,
           () => onOpen(entry),
           route: entry.id,
-          selected: entry.id == state.focusedId,
+          selected: _zone == 'cards' && entry.id == state.focusedId,
         );
       }
       await tile(
@@ -550,6 +566,8 @@ class VrDemoLibraryPanel {
           () => id == 'library'
               ? setCategory(VrDemoLibraryCategory.featured)
               : onAction(id),
+          route: 'dock:$id',
+          selected: _zone == 'dock' && i == _focusedDockIndex,
         );
       }
       if (_disposed || revision != _revision) return;
@@ -594,10 +612,75 @@ class VrDemoLibraryPanel {
 
   Future<void> moveFocus(VrLibraryDirection direction) async {
     if (_disposed || !root.visible || busy) return;
-    final before = state.pageIndex;
-    state = state.moveFocus(direction);
     _hoveredAction = null;
     _hoveredRoute = null;
+
+    if (_zone == 'categories') {
+      const cats = VrDemoLibraryCategory.values;
+      if (direction == VrLibraryDirection.up) {
+        _focusedCategoryIndex =
+            (_focusedCategoryIndex - 1 + cats.length) % cats.length;
+      } else if (direction == VrLibraryDirection.down) {
+        if (_focusedCategoryIndex + 1 < cats.length) {
+          _focusedCategoryIndex++;
+        } else if (dockActions.isNotEmpty) {
+          _zone = 'dock';
+          _focusedDockIndex = 0;
+        }
+      } else if (direction == VrLibraryDirection.right) {
+        _zone = 'cards';
+      }
+      _updateHighlight();
+      return;
+    }
+
+    if (_zone == 'dock') {
+      final count = dockActions.length;
+      if (count == 0) {
+        _zone = 'cards';
+        _updateHighlight();
+        return;
+      }
+      if (direction == VrLibraryDirection.left) {
+        _focusedDockIndex = (_focusedDockIndex - 1 + count) % count;
+      } else if (direction == VrLibraryDirection.right) {
+        _focusedDockIndex = (_focusedDockIndex + 1) % count;
+      } else if (direction == VrLibraryDirection.up) {
+        _zone = 'cards';
+      }
+      _updateHighlight();
+      return;
+    }
+
+    // _zone == 'cards': check boundary transitions into Categories (left) or Dock (down)
+    final pageItems = state.pageEntries;
+    final localIdx = pageItems.indexWhere((e) => e.id == state.focusedId);
+    if (direction == VrLibraryDirection.left &&
+        localIdx >= 0 &&
+        localIdx % VrDemoCatalog.columns == 0 &&
+        !state.hasPreviousPage) {
+      _zone = 'categories';
+      _focusedCategoryIndex = state.category.index;
+      _updateHighlight();
+      return;
+    }
+    if (direction == VrLibraryDirection.down &&
+        dockActions.isNotEmpty &&
+        (pageItems.isEmpty ||
+            (localIdx >= 0 &&
+                localIdx + VrDemoCatalog.columns >= pageItems.length))) {
+      _zone = 'dock';
+      final col = localIdx >= 0 ? (localIdx % VrDemoCatalog.columns) : 0;
+      _focusedDockIndex = ((col / 2) * (dockActions.length - 1)).round().clamp(
+        0,
+        dockActions.length - 1,
+      );
+      _updateHighlight();
+      return;
+    }
+
+    final before = state.pageIndex;
+    state = state.moveFocus(direction);
     if (before != state.pageIndex) {
       await refresh();
     } else {
@@ -609,13 +692,49 @@ class VrDemoLibraryPanel {
     if (_disposed || !root.visible || busy) return;
     _hoveredAction = _actions[node];
     _hoveredRoute = _routes[node];
-    if (_hoveredRoute != null) state = state.focusRoute(_hoveredRoute!);
+    if (_hoveredRoute != null) {
+      if (_hoveredRoute!.startsWith('cat:')) {
+        final name = _hoveredRoute!.substring(4);
+        final idx = VrDemoLibraryCategory.values.indexWhere(
+          (c) => c.name == name,
+        );
+        if (idx >= 0) {
+          _zone = 'categories';
+          _focusedCategoryIndex = idx;
+        }
+      } else if (_hoveredRoute!.startsWith('dock:')) {
+        final id = _hoveredRoute!.substring(5);
+        final idx = dockActions.indexWhere((d) => d.$1 == id);
+        if (idx >= 0) {
+          _zone = 'dock';
+          _focusedDockIndex = idx;
+        }
+      } else {
+        _zone = 'cards';
+        state = state.focusRoute(_hoveredRoute!);
+      }
+    }
     _updateHighlight();
   }
 
   void _updateHighlight() {
+    final activeCategoryKey = 'cat:${state.category.name}';
+    final focusedCategoryKey =
+        'cat:${VrDemoLibraryCategory.values[_focusedCategoryIndex.clamp(0, VrDemoLibraryCategory.values.length - 1)].name}';
+    final focusedDockKey = dockActions.isEmpty
+        ? ''
+        : 'dock:${dockActions[_focusedDockIndex.clamp(0, dockActions.length - 1)].$1}';
     for (final entry in _highlights.entries) {
-      entry.value.visible = entry.key == state.focusedId;
+      final k = entry.key;
+      if (k.startsWith('cat:')) {
+        entry.value.visible = _zone == 'categories'
+            ? k == focusedCategoryKey
+            : k == activeCategoryKey;
+      } else if (k.startsWith('dock:')) {
+        entry.value.visible = _zone == 'dock' && k == focusedDockKey;
+      } else {
+        entry.value.visible = _zone == 'cards' && k == state.focusedId;
+      }
     }
   }
 
@@ -627,6 +746,27 @@ class VrDemoLibraryPanel {
     if (_disposed || busy || !root.visible) return;
     if (_hoveredAction != null) {
       _hoveredAction!();
+      return;
+    }
+    if (_zone == 'categories') {
+      final cat =
+          VrDemoLibraryCategory.values[_focusedCategoryIndex.clamp(
+            0,
+            VrDemoLibraryCategory.values.length - 1,
+          )];
+      _zone = 'cards';
+      setCategory(cat);
+      return;
+    }
+    if (_zone == 'dock' && dockActions.isNotEmpty) {
+      final (id, _) =
+          dockActions[_focusedDockIndex.clamp(0, dockActions.length - 1)];
+      if (id == 'library') {
+        _zone = 'cards';
+        setCategory(VrDemoLibraryCategory.featured);
+      } else {
+        onAction(id);
+      }
       return;
     }
     final entry = state.catalog.resolveRoute(state.focusedId ?? '');

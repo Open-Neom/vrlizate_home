@@ -15,6 +15,7 @@ import 'home_architecture_batch.dart';
 import 'home_ecosystem_layout.dart';
 import 'home_lobby_layout.dart';
 import 'home_room_identity.dart';
+import 'home_plaza_crowd.dart';
 import 'home_surface_textures.dart';
 import 'home_showcase.dart';
 import 'virtual_home_models.dart';
@@ -71,6 +72,7 @@ class VirtualHomeWorldBuilder {
   final List<_HomeArchitectureVariant> _architecture = [];
   Future<void> _materialsReady = Future<void>.value();
   final List<HomeShowcase> _showcases = [];
+  HomePlazaCrowd? _crowd;
   VrAvatarAppearance? _avatarAppearance;
 
   void setAvatarAppearance(VrAvatarAppearance? appearance) {
@@ -113,6 +115,8 @@ class VirtualHomeWorldBuilder {
       showcase.dispose();
     }
     _showcases.clear();
+    _crowd?.dispose();
+    _crowd = HomePlazaCrowd.plan(layout: ecosystemLayout, theme: theme);
     final previousRoot = _environmentRoot;
     if (previousRoot != null) previousRoot.parent?.remove(previousRoot);
     waypoints.clear();
@@ -736,6 +740,7 @@ class VirtualHomeWorldBuilder {
       await Scene.initializeStaticResources();
       if (!Scene.isReadyToRender || generation != _generation) return;
       _installThemeSkyEnvironment(scene);
+      _crowd?.mountGpu(root);
       for (final exhibit in exhibits) {
         final actionHint = exhibit.id == 'mall_directory'
             ? 'A · Cambiar de Plaza Famosa'
@@ -1103,6 +1108,7 @@ class VirtualHomeWorldBuilder {
     vm.Vector3? eyePosition,
   }) {
     if (eyePosition != null) observe(eyePosition);
+    _crowd?.tick(time, eyePosition: eyePosition);
     if (identical(_hoveredWaypoint, hoveredWaypoint)) return;
     _hoveredWaypoint?.material.emissiveFactor.setValues(0, 0, 0, 1);
     _hoveredWaypoint = hoveredWaypoint;
