@@ -6,16 +6,16 @@ import 'home_lobby_layout.dart';
 import 'home_surface_texture_data.dart';
 
 /// Shared 256px procedural PBR finishes, independent of app assets and services.
-/// Low/medium uploads color only (`2x` anisotropy); detail maps (normal +
-/// Toksvig-filtered glTF ORM occlusion / roughness / metallic) are lazy and
-/// uploaded as hardware block-compressed `KTX2` (`ASTC 4x4` / `ETC2` / `BC`)
-/// once on high/ultra visits.
+/// Low tier uploads color only (`2x` anisotropy); medium/high/ultra uploads
+/// detail maps (normal + Toksvig-filtered glTF ORM occlusion / roughness /
+/// metallic) encoded in a single background isolate pass as hardware
+/// block-compressed `KTX2` (`ASTC 4x4` / `ETC2` / `BC`).
 abstract final class HomeSurfaceTextures {
-  static final _pixels = <HomeSurface, Future<HomeSurfaceTextureData>>{};
+  static final _bundles = <HomeSurface, Future<_HomeEncodedSurfaceBundle>>{};
   static final _colors =
       <(HomeSurface, int), Future<TextureSource>>{};
   static final _details =
-      <HomeSurface, Future<(TextureSource, TextureSource)>>{};
+      <(HomeSurface, int), Future<(TextureSource, TextureSource)>>{};
 
   static HomeSurface surfaceFor(HomeLobbyFinish finish) => switch (finish) {
     HomeLobbyFinish.stone => HomeSurface.limestone,
@@ -26,8 +26,8 @@ abstract final class HomeSurfaceTextures {
   };
 
   /// Selects anisotropy based on lobby finish role and detail tier (`2x` on
-  /// low/medium unlit/baked visits; `8x` on oblique floors/rugs and `4x` on
-  /// vertical walls/trims in high/ultra PBR visits).
+  /// low unlit/baked visits; `8x` on oblique floors/rugs and `4x` on vertical
+  /// walls/trims in medium/high/ultra PBR visits).
   static TextureSampling samplingFor(
     HomeLobbyFinish finish, {
     required bool details,
@@ -40,11 +40,11 @@ abstract final class HomeSurfaceTextures {
     return TextureSampling(maxAnisotropy: isFloorLike ? 8 : 4);
   }
 
-  static Future<HomeSurfaceTextureData> _data(HomeSurface surface) =>
-      _pixels[surface] ??= compute(
-        HomeSurfaceTextureData.generate,
+  static Future<_HomeEncodedSurfaceBundle> _bundle(HomeSurface surface) =>
+      _bundles[surface] ??= compute(
+        _generateAndEncodeSurfaceBundle,
         surface,
-        debugLabel: 'home:${surface.name}',
+        debugLabel: 'home-ktx2-bundle:${surface.name}',
       );
 
   static Future<TextureSource> _color(
@@ -52,30 +52,25 @@ abstract final class HomeSurfaceTextures {
     TextureSampling sampling,
   ) => _colors[(surface, sampling.maxAnisotropy)] ??= () async {
     try {
-      final data = await _data(surface);
-      final ktx2 = await compute(
-        _encodeColorKtx2,
-        data,
-        debugLabel: 'home-color-ktx2:${surface.name}',
-      );
+      final bundle = await _bundle(surface);
       try {
         return await VrKtx2TextureLoader.load(
-          ktx2,
+          bundle.colorKtx2,
           content: TextureContent.color,
           sampling: sampling,
         );
       } on Object {
         return Texture2D.fromPixels(
-          data.color,
-          data.size,
-          data.size,
+          bundle.data.color,
+          bundle.data.size,
+          bundle.data.size,
           content: TextureContent.color,
           sampling: sampling,
         );
       }
     } catch (_) {
       _colors.remove((surface, sampling.maxAnisotropy));
-      _pixels.remove(surface);
+      _bundles.remove(surface);
       rethrow;
     }
   }();
@@ -83,25 +78,20 @@ abstract final class HomeSurfaceTextures {
   static Future<(TextureSource, TextureSource)> _detail(
     HomeSurface surface,
     TextureSampling sampling,
-  ) => _details[surface] ??= () async {
+  ) => _details[(surface, sampling.maxAnisotropy)] ??= () async {
     try {
-      final data = await _data(surface);
+      final bundle = await _bundle(surface);
       const ormSampling = TextureSampling(maxAnisotropy: 4);
-      final encoded = await compute(
-        _encodeDetailKtx2,
-        data,
-        debugLabel: 'home-detail-ktx2:${surface.name}',
-      );
       try {
         final sources = await VrKtx2TextureLoader.loadBatch(
           <VrKtx2LoadRequest>[
             VrKtx2LoadRequest(
-              bytes: encoded.$1,
+              bytes: bundle.normalKtx2,
               content: TextureContent.normal,
               sampling: sampling,
             ),
             VrKtx2LoadRequest(
-              bytes: encoded.$2,
+              bytes: bundle.ormKtx2,
               content: TextureContent.data,
               sampling: ormSampling,
             ),
@@ -111,23 +101,24 @@ abstract final class HomeSurfaceTextures {
       } on Object {
         return (
           Texture2D.fromPixels(
-            data.normal,
-            data.size,
-            data.size,
+            bundle.data.normal,
+            bundle.data.size,
+            bundle.data.size,
             content: TextureContent.normal,
             sampling: sampling,
           ),
           Texture2D.fromPixels(
-            data.roughness,
-            data.size,
-            data.size,
+            bundle.data.roughness,
+            bundle.data.size,
+            bundle.data.size,
             content: TextureContent.data,
             sampling: ormSampling,
           ),
         );
       }
     } catch (_) {
-      _details.remove(surface);
+      _details.remove((surface, sampling.maxAnisotropy));
+      _bundles.remove(surface);
       rethrow;
     }
   }();
@@ -162,25 +153,33 @@ abstract final class HomeSurfaceTextures {
   }
 }
 
-Uint8List _encodeColorKtx2(HomeSurfaceTextureData data) {
-  final mips = VrToksvigFilter.downsampleColorMipChain(
-    data.color,
-    data.size,
-    data.size,
-  );
-  return VrKtx2Codec.encodeMipChainToKtx2(mips, srgb: true);
+final class _HomeEncodedSurfaceBundle {
+  const _HomeEncodedSurfaceBundle({
+    required this.data,
+    required this.colorKtx2,
+    required this.normalKtx2,
+    required this.ormKtx2,
+  });
+
+  final HomeSurfaceTextureData data;
+  final Uint8List colorKtx2;
+  final Uint8List normalKtx2;
+  final Uint8List ormKtx2;
 }
 
-(Uint8List, Uint8List) _encodeDetailKtx2(HomeSurfaceTextureData data) {
+_HomeEncodedSurfaceBundle _generateAndEncodeSurfaceBundle(HomeSurface surface) {
+  final data = HomeSurfaceTextureData.generate(surface);
   final coupled = VrToksvigFilter.generateCoupledPbrMipChain(
-    albedoRgba: Uint8List(4)..fillRange(0, 4, 255),
+    albedoRgba: data.color,
     normalRgba: data.normal,
     ormRgba: data.roughness,
     width: data.size,
     height: data.size,
   );
-  return (
-    VrKtx2Codec.encodeMipChainToKtx2(coupled.normal, srgb: false),
-    VrKtx2Codec.encodeMipChainToKtx2(coupled.orm, srgb: false),
+  return _HomeEncodedSurfaceBundle(
+    data: data,
+    colorKtx2: VrKtx2Codec.encodeMipChainToKtx2(coupled.albedo, srgb: true),
+    normalKtx2: VrKtx2Codec.encodeMipChainToKtx2(coupled.normal, srgb: false),
+    ormKtx2: VrKtx2Codec.encodeMipChainToKtx2(coupled.orm, srgb: false),
   );
 }

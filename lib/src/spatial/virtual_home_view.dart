@@ -547,6 +547,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _scene,
       enableShadows: enableShadows,
       shadowMapResolution: _qualityPreset.shadowMapResolution,
+      bakedArchitecture: _qualityPreset.tier == VrQualityTier.low,
     );
     _bindAvatarAppearance();
     _buildLibrary();
@@ -681,6 +682,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             _qualityPreset.tier == VrQualityTier.high ||
             _qualityPreset.tier == VrQualityTier.ultra,
         shadowMapResolution: _qualityPreset.shadowMapResolution,
+        bakedArchitecture: _qualityPreset.tier == VrQualityTier.low,
       );
       _bindAvatarAppearance();
       _hoveredWaypoint = null;
@@ -1656,6 +1658,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           _worldBuilder.setShadowsEnabled(
             enableShadows,
             shadowMapResolution: g.targetPreset!.shadowMapResolution,
+            bakedArchitecture: g.targetPreset!.tier == VrQualityTier.low,
           );
           setState(() => _qualityPreset = g.targetPreset!);
         }
@@ -2202,6 +2205,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _worldBuilder.setShadowsEnabled(
         enableShadows,
         shadowMapResolution: _qualityPreset.shadowMapResolution,
+        bakedArchitecture: _qualityPreset.tier == VrQualityTier.low,
       );
       HapticFeedback.selectionClick();
     });
@@ -3053,6 +3057,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                         _worldBuilder.setShadowsEnabled(
                           enableShadows,
                           shadowMapResolution: preset.shadowMapResolution,
+                          bakedArchitecture: preset.tier == VrQualityTier.low,
                         );
                         setState(() => _qualityPreset = preset);
                       }
