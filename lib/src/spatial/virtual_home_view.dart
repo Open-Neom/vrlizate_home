@@ -375,6 +375,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   bool _routeVisible = true;
   bool get _homeSurfaceActive => _routeVisible && !_isDemoActive;
   bool _modalNavigationLatched = false;
+  final VrDpadLatch _libraryDpadLatch = VrDpadLatch();
+  bool _libraryDpadFocusActive = false;
 
   bool _isRemoteConnected = false;
   bool _remoteLaserMode = false;
@@ -1168,6 +1170,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             state.stickClick ||
             state.btnGrip ||
             state.laserSlideActive ||
+            state.dpadX.abs() > 0.25 ||
+            state.dpadY.abs() > 0.25 ||
             state.stickX.abs() > 0.015 ||
             state.stickY.abs() > 0.015 ||
             state.turnRate.abs() > 0.015 ||
@@ -1206,7 +1210,22 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         _remoteXDown = state.btnX;
         _remoteYDown = state.btnY;
         if (_hasWorldModal) {
-          _handleWorldModalNavigation(state.stickX, state.stickY);
+          _libraryDpadLatch.reset();
+          final modalX = state.dpadX.abs() > state.stickX.abs()
+              ? state.dpadX
+              : state.stickX;
+          final modalY = state.dpadY.abs() > state.stickY.abs()
+              ? state.dpadY
+              : state.stickY;
+          _handleWorldModalNavigation(modalX, modalY);
+        } else {
+          final dpadDirection = _libraryDpadLatch.update(
+            state.dpadX,
+            state.dpadY,
+          );
+          if (dpadDirection != null) {
+            _handleLibraryDpadNavigation(dpadDirection);
+          }
         }
         if (backPressed && !_remoteBackDown) {
           _handleBackAction();
@@ -1577,6 +1596,11 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     );
     final library = _library;
     final libraryInFront = library != null && _isLibraryInFrontOfViewer();
+    if (_libraryDpadFocusActive && libraryInFront) {
+      _bindings.onSound?.call(VrHomeSound.open);
+      library.activateFocused();
+      return;
+    }
     if (hit != null && !_worldBuilder.blocksPointer(hit.node)) {
       final occludedByLibrary =
           libraryInFront &&
@@ -2238,7 +2262,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       return;
     }
     if (_library != null) {
-      _library!.hover(node);
+      if (node != null && _library!.owns(node)) {
+        _libraryDpadFocusActive = false;
+        _library!.hover(node);
+      } else if (!_libraryDpadFocusActive) {
+        _library!.hover(node);
+      }
       final exhibit = _worldBuilder.exhibitFor(node);
       if (exhibit != null) {
         final message = '${exhibit.title} · A: abrir experiencia';
@@ -2567,6 +2596,29 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (mounted && label != null) {
       setState(() => _statusMessage = label);
     }
+    HapticFeedback.selectionClick();
+  }
+
+  void _handleLibraryDpadNavigation(VrLibraryDirection direction) {
+    final library = _library;
+    if (library == null || library.busy || !_isLibraryInFrontOfViewer()) {
+      return;
+    }
+    _libraryDpadFocusActive = true;
+    unawaited(
+      library.moveFocus(direction).then((_) {
+        if (!mounted) return;
+        final focused = library.state.catalog.resolveRoute(
+          library.state.focusedId ?? '',
+        );
+        if (focused != null) {
+          setState(
+            () => _statusMessage = '${focused.title} · Pulsa A para abrir',
+          );
+        }
+      }),
+    );
+    _bindings.onSound?.call(VrHomeSound.hover);
     HapticFeedback.selectionClick();
   }
 
