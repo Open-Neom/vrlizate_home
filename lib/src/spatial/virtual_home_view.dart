@@ -491,7 +491,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     _rig = StereoHeadRig(
-      eyeCenter: _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.60, 0),
+      eyeCenter:
+          _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.60, 0),
     );
     _arbiter = VrInputArbiter();
 
@@ -859,27 +860,14 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
   bool _isLibraryInFrontOfViewer() {
     final library = _library;
-    if (library == null || _libraryHiddenByUser || !library.root.visible) {
-      return false;
-    }
-    final libPos = library.worldPosition;
-    final dx = libPos.x - _rig.eyeCenter.x;
-    final dz = libPos.z - _rig.eyeCenter.z;
-    final horizontalDist = math.sqrt(dx * dx + dz * dz);
-    if (horizontalDist > VrHomeConstants.mainMenuNearbyRadiusMeters ||
-        horizontalDist < 0.05) {
-      return false;
-    }
-    final dirX = dx / horizontalDist;
-    final dirZ = dz / horizontalDist;
-    final forwardLen = math.sqrt(
-      _rig.forward.x * _rig.forward.x + _rig.forward.z * _rig.forward.z,
+    if (library == null) return false;
+    return isHomeLibraryInFrontOfViewer(
+      eyePosition: _rig.eyeCenter,
+      viewerForward: _rig.forward,
+      libraryPosition: library.worldPosition,
+      libraryVisible: library.root.visible,
+      libraryHiddenByUser: _libraryHiddenByUser,
     );
-    if (forwardLen < 1e-4) return true;
-    final dot =
-        (dirX * (_rig.forward.x / forwardLen)) +
-        (dirZ * (_rig.forward.z / forwardLen));
-    return dot >= VrHomeConstants.mainMenuMinForwardDot;
   }
 
   void _summonOrToggleMainMenu({bool toggleIfAlreadyHere = true}) {
@@ -1046,6 +1034,19 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     );
   }
 
+  /// Keep the phone mesh, beam and hit feedback under one pointer contract.
+  /// Capture hides the entire root; restoring it still respects current pose.
+  bool _syncRemotePointerFeedback([RemoteControllerState? state]) {
+    final active =
+        _isRemoteConnected &&
+        !_assistantCapturing &&
+        VrHomeRemotePointer.isPointing(state ?? _remoteController.latestState);
+    _laserPointer.rootNode.visible = !_assistantCapturing;
+    _laserPointer.visible = active;
+    _laserPointer.setLaserBeamActive(active);
+    return active;
+  }
+
   void _bindHost({bool openPairing = false, bool initial = false}) {
     final generation = ++_hostGeneration;
     _assistantChanges = _bindings.assistantChanges;
@@ -1072,9 +1073,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (_isRemoteConnected) {
       _hudHidden = true;
       _seedHeldRemoteButtons();
-      final showLaser = _remoteController.latestState.controllerVisible;
-      _laserPointer.visible = showLaser;
-      _laserPointer.setLaserBeamActive(showLaser);
+      _syncRemotePointerFeedback();
     }
     _arbiter.setDwellSuppressed(VrInputSource.remotePhone, _isRemoteConnected);
     _subscriptions.add(
@@ -1105,10 +1104,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
               _modalLaserTriggerQueued = false;
               _modalLaserTarget = null;
             }
-            final showLaser =
-                connected && _remoteController.latestState.controllerVisible;
-            _laserPointer.visible = showLaser;
-            _laserPointer.setLaserBeamActive(showLaser);
+            _syncRemotePointerFeedback();
             _statusMessage = connected
                 ? '🎮 2º Smartphone conectado como Mando/Joystick VR!'
                 : 'Mando remoto desconectado';
@@ -1151,10 +1147,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             _hoveredWaypoint = null;
           });
         }
-        _laserPointer.visible = _isRemoteConnected && state.controllerVisible;
-        _laserPointer.setLaserBeamActive(
-          _isRemoteConnected && state.controllerVisible,
-        );
+        _syncRemotePointerFeedback(state);
         _laserPointer.setStickDeflection(
           hasLaserAim ? state.laserX : state.stickX,
           hasLaserAim ? state.laserY : state.stickY,
@@ -1574,20 +1567,32 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _activateWorldModalFocused();
       return;
     }
-    // First prefer the exact interactive target under head gaze.
+    // First prefer the exact interactive target under head gaze, unless a
+    // background exhibit/portal lies behind the visible Library window's gap.
     final hit = _scene.raycast(
       vm.Ray.originDirection(_rig.eyeCenter, _rig.forward),
       where: _homeRaycastCandidate,
     );
+    final library = _library;
+    final libraryInFront = library != null && _isLibraryInFrontOfViewer();
     if (hit != null && !_worldBuilder.blocksPointer(hit.node)) {
-      _onSelect(hit.node);
-      return;
+      final occludedByLibrary =
+          libraryInFront &&
+          !library.owns(hit.node) &&
+          library.occludesRay(
+            origin: _rig.eyeCenter,
+            direction: _rig.forward,
+            maxDistance: hit.distance,
+          );
+      if (!occludedByLibrary) {
+        _onSelect(hit.node);
+        return;
+      }
     }
     // When facing the Library panel (for example when un-reticled head gaze
     // rests on a card frame, gap, title or panel background), A activates the
     // highlighted card/action without ever opening a stale card after walking away.
-    final library = _library;
-    if (library != null && _isLibraryInFrontOfViewer()) {
+    if (libraryInFront) {
       _bindings.onSound?.call(VrHomeSound.open);
       library.activateFocused();
     }
@@ -1661,6 +1666,30 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       case VrHomeActionType.switchCatalog2D:
         _showCatalog();
         break;
+      case VrHomeActionType.moveInSpace:
+        if (_hasWorldModal) {
+          setState(() {
+            _statusMessage = 'Cierra el panel antes de caminar por voz';
+          });
+          break;
+        }
+        if (g.durationSeconds <= 0 ||
+            (g.stickX.abs() <= 0.015 &&
+                g.stickY.abs() <= 0.015 &&
+                g.turnRate.abs() <= 0.015)) {
+          _locomotion.stopVoiceMotion();
+        } else {
+          _locomotion.startVoiceMotion(
+            stickX: g.stickX,
+            stickY: g.stickY,
+            turnRate: g.turnRate,
+            durationSeconds: g.durationSeconds,
+          );
+        }
+        break;
+      case VrHomeActionType.goToPoint:
+        _goToSpecificPoint(g);
+        break;
       case VrHomeActionType.conversationalGuidance:
         break;
     }
@@ -1673,6 +1702,18 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     setState(() => _statusMessage = 'Vista recentrada al frente');
   }
 
+  static const Map<String, List<String>> _waypointWingAliases = {
+    'lobby_center': ['mall_hub', 'mall_entry'],
+    'north_games': ['wing_north'],
+    'east_prod': ['wing_east'],
+    'west_media': ['wing_west'],
+    'south_labs': ['wing_south'],
+    'wing_north': ['north_games'],
+    'wing_east': ['east_prod'],
+    'wing_west': ['west_media'],
+    'wing_south': ['south_labs'],
+  };
+
   void _jumpToWaypointId(String id) {
     if (_hasWorldModal) {
       setState(() {
@@ -1683,18 +1724,25 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     // Sync library category tab AND perform physical parabolic jump to the wing.
     if (_library != null) {
       final category = switch (id) {
-        'north_games' => VrDemoLibraryCategory.games,
-        'east_prod' => VrDemoLibraryCategory.productivity,
-        'west_media' => VrDemoLibraryCategory.learn,
-        'south_labs' => VrDemoLibraryCategory.lab,
+        'north_games' || 'wing_north' => VrDemoLibraryCategory.games,
+        'east_prod' || 'wing_east' => VrDemoLibraryCategory.productivity,
+        'west_media' || 'wing_west' => VrDemoLibraryCategory.learn,
+        'south_labs' || 'wing_south' => VrDemoLibraryCategory.lab,
         _ => VrDemoLibraryCategory.featured,
       };
       _library!.setCategory(category);
     }
-    final wp = _worldBuilder.waypoints.firstWhere(
-      (w) => w.id == id,
-      orElse: () => _worldBuilder.waypoints.first,
-    );
+    FloorWaypoint? matched;
+    for (final candidate in [id, ...?_waypointWingAliases[id]]) {
+      for (final w in _worldBuilder.waypoints) {
+        if (w.id == candidate) {
+          matched = w;
+          break;
+        }
+      }
+      if (matched != null) break;
+    }
+    final wp = matched ?? _worldBuilder.waypoints.first;
     _locomotion.startJump(
       from: _rig.eyeCenter,
       to: vm.Vector3(wp.position.x, 1.60, wp.position.z),
@@ -1703,6 +1751,41 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     setState(() {
       _statusMessage = 'Saltando a ${wp.name}...';
     });
+  }
+
+  void _goToSpecificPoint(VrHomeGuidance g) {
+    if (_hasWorldModal) {
+      setState(() {
+        _statusMessage = 'Elige una opción del panel antes de moverte';
+      });
+      return;
+    }
+    final resolved = VirtualHomeLocomotionController.resolveSpecificPoint(
+      guidance: g,
+      rig: _rig,
+      walkSpace: _walkSpace,
+      waypoints: _worldBuilder.waypoints,
+      portals: _worldBuilder.ecosystemLayout.portals,
+      exhibits: _bindings.exhibits,
+      hoveredWaypoint: _hoveredWaypoint,
+    );
+    final dest = resolved.destination;
+    if (dest != null && resolved.targetName != null) {
+      if (resolved.faceLookX != null && resolved.faceLookZ != null) {
+        VirtualHomeLocomotionController.faceHorizontalPoint(
+          _rig,
+          dest,
+          resolved.faceLookX!,
+          resolved.faceLookZ!,
+        );
+      }
+      _locomotion.startJump(
+        from: _rig.eyeCenter,
+        to: dest,
+        targetName: resolved.targetName!,
+      );
+    }
+    setState(() => _statusMessage = resolved.statusMessage);
   }
 
   @override
@@ -1784,7 +1867,57 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
     // Home owns movement because its walls and furniture need XZ collisions.
     // The scene's generic input integration remains disabled below.
-    if ((_hudHidden || _isRemoteConnected) && !_locomotion.isJumping) {
+    if (_locomotion.isVoiceMoving && !_locomotion.isJumping) {
+      final gamepadOverride =
+          _gamepadMotion.moveX.abs() > 0.16 ||
+          _gamepadMotion.moveY.abs() > 0.16 ||
+          _gamepadMotion.lookX.abs() > 0.16;
+      if (gamepadOverride || _hasWorldModal) {
+        _locomotion.stopVoiceMotion();
+      } else {
+        if (_isRemoteConnected) {
+          final state = _remoteController.latestState;
+          if (state.recenter && !_lastRemoteRecenter) {
+            _recenterView();
+          }
+          _lastRemoteRecenter = state.recenter;
+        }
+        final voiceStep = _locomotion.consumeVoiceStep(dt);
+        if (voiceStep.stepDt > 0) {
+          if (voiceStep.turnRate.abs() > 0.015) {
+            applyHomeLookRotation(
+              _rig,
+              voiceStep.turnRate,
+              0,
+              voiceStep.stepDt,
+            );
+          }
+          if (voiceStep.stickX.abs() > 0.015 ||
+              voiceStep.stickY.abs() > 0.015) {
+            _rig.eyeCenter = _locomotion.applySmoothRigLocomotion(
+              rig: _rig,
+              stickX: voiceStep.stickX,
+              stickY: voiceStep.stickY,
+              edgeTurnEnabled: false,
+              manualLook: voiceStep.turnRate.abs() > 0.015,
+              dt: voiceStep.stepDt,
+              speed: 1.8,
+              maxSpeed: 2.6,
+              accelerationSeconds: 2.0,
+              walkSpace: _walkSpace,
+            );
+            final room = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
+            if (room != null && room.title != _currentZoneName) {
+              setState(() {
+                _currentZoneName = room.title;
+                _statusMessage =
+                    '${room.title} · Apunta a una exhibición y pulsa A';
+              });
+            }
+          }
+        }
+      }
+    } else if ((_hudHidden || _isRemoteConnected) && !_locomotion.isJumping) {
       final state = _remoteController.latestState;
       if (_isRemoteConnected && state.recenter && !_lastRemoteRecenter) {
         _recenterView();
@@ -1855,9 +1988,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       final state = _remoteController.latestState;
       final hasLaserAim =
           state.laserX.abs() > 0.04 || state.laserY.abs() > 0.04;
-      final isLaser = VrHomeRemotePointer.isPointing(state);
-      _laserPointer.visible = state.controllerVisible;
-      _laserPointer.setLaserBeamActive(state.controllerVisible);
+      final isLaser = _syncRemotePointerFeedback(state);
       _laserPointer.setStickDeflection(
         hasLaserAim ? state.laserX : state.stickX,
         hasLaserAim ? state.laserY : state.stickY,
@@ -1879,7 +2010,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       // Quest-style ray: the beam is only a short stub at the hand; the
       // target is shown by a reticle on whatever surface the ray touches.
       // The pointer's own meshes are not raycastable, so it never hits itself.
-      if (state.controllerVisible) {
+      if (isLaser) {
         final surface = _scene.raycast(
           vm.Ray.originDirection(laserOrigin, laserDir),
           maxDistance: _laserReticleRange,
@@ -1889,18 +2020,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           normal: surface?.worldNormal,
           eye: _rig.eyeCenter,
         );
-        if (isLaser && (_hudHidden || _isRemoteConnected)) {
-          _checkLaserIntersection(laserOrigin, laserDir);
-        } else if (!isLaser) {
-          if (_remoteLaserHitsTarget) {
-            setState(() => _remoteLaserHitsTarget = false);
-          }
-          _modalLaserTriggerQueued = false;
-        }
+        _checkLaserIntersection(laserOrigin, laserDir);
       } else {
         if (_remoteLaserHitsTarget) {
           setState(() => _remoteLaserHitsTarget = false);
         }
+        _modalLaserTarget = null;
         _laserPointer.setHit(point: null, eye: _rig.eyeCenter);
         if (_modalLaserTriggerQueued) {
           _modalLaserTriggerQueued = false;
@@ -2794,7 +2919,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       if (action == 'vision') {
         setState(() => _assistantCapturing = true);
         _itzliPanel?.rootNode.visible = false;
-        _laserPointer.rootNode.visible = false;
+        _syncRemotePointerFeedback();
         // The host performs its own capture after this clean immersive frame.
         await WidgetsBinding.instance.endOfFrame;
         if (!mounted || session != _assistantSession || !_itzliOpen) return;
@@ -2810,7 +2935,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         if (action == 'vision') {
           setState(() => _assistantCapturing = false);
           _itzliPanel?.rootNode.visible = true;
-          _laserPointer.rootNode.visible = true;
+          _syncRemotePointerFeedback();
         }
         _assistantStateChanged();
       }
@@ -2843,7 +2968,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _assistantPanelSnapshot = null;
     _assistantRebuildQueued = false;
     _assistantCapturing = false;
-    _laserPointer.rootNode.visible = true;
+    _syncRemotePointerFeedback();
     _itzliPanel?.removeFrom(_scene);
     _itzliPanel = null;
     _itzliPose = null;

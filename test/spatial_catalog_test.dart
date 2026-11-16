@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vrlizate_home/src/spatial/vr_demo_library_panel.dart';
 import 'package:vrlizate_home/vrlizate_home_catalog.dart';
 
 VrDemoLibraryEntry _entry(
@@ -19,6 +20,39 @@ VrDemoLibraryEntry _entry(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'cover draws both title lines above the subtitle at 640 × 424',
+    () async {
+      final cover = await const VrLibraryArtwork(
+        title: 'Museo Nuevo\nMonterrey',
+        subtitle: 'Contenido del anfitrión',
+        cover: true,
+      ).rasterize();
+      final background = await const VrLibraryArtwork(
+        title: '',
+        subtitle: 'Contenido del anfitrión',
+        cover: true,
+      ).rasterize();
+      expect((cover.width, cover.height), (640, 424));
+      final titleRows = <int>[];
+      final stride = cover.width * 4;
+      for (var y = 0; y < cover.height; y++) {
+        final start = y * stride;
+        for (var index = start; index < start + stride; index++) {
+          if (cover.pixels[index] != background.pixels[index]) {
+            titleRows.add(y);
+            break;
+          }
+        }
+      }
+      expect(titleRows.any((y) => y >= 183 && y < 230), isTrue);
+      expect(titleRows.any((y) => y >= 244 && y < 306), isTrue);
+      expect(titleRows.every((y) => y < 306), isTrue);
+    },
+  );
+
   test(
     'two hosts can use the same route without sharing inventory or focus',
     () {

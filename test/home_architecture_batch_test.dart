@@ -170,7 +170,9 @@ void main() {
       expect(mesh.normals.length, vertexCount * 3);
       expect(mesh.colors.length, vertexCount * 4);
       expect(mesh.textureCoordinates.length, vertexCount * 2);
+      expect(mesh.tangents.length, vertexCount * 4);
       expect(mesh.textureCoordinates.every((value) => value.isFinite), isTrue);
+      expect(mesh.tangents.every((value) => value.isFinite), isTrue);
       final points = <vm.Vector3>[];
       final normals = <vm.Vector3>[];
       for (var i = 0; i < vertexCount; i++) {

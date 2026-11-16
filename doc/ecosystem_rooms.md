@@ -17,10 +17,10 @@ duplicadas; el host puede aportar `unavailableReasons`, `onBack` y
 existente. `onOpenRoom(context, room)` conecta cada terminal con las funciones
 del host. Sin salas se conserva exactamente el plano anterior.
 
-`HomeEcosystemLayout` genera una plaza de 24 m de ancho y dos habitaciones por fila. Comparte
-suelo, paredes y muebles con `HomeWalkSpace`; las puertas tienen 3.2 m de ancho
-y 3 m de altura libre. Se llega caminando desde el lobby, se rodea la exhibición
-de la galería y se atraviesa su puerta posterior. Cada sala tiene mobiliario,
+`HomeEcosystemLayout` genera una plaza de 30 m de ancho y dos habitaciones por fila (o un crucero distribuido en 4 alas). Comparte
+suelo, paredes y muebles con `HomeWalkSpace`; los portales tienen 6.6 m de ancho
+y 3.3 m de altura libre (6.8 m en el arco principal Galería ↔ Plaza). Se llega caminando en línea directa desde el lobby a través
+de la galería y su gran portal posterior. Cada sala tiene mobiliario,
 acento, señalética sobre la puerta y terminal seleccionable mediante mirada,
 toque o mando. La biblioteca y las experiencias existentes permanecen en Home.
 

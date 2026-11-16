@@ -1,9 +1,44 @@
+import 'dart:math' as math;
+
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate/vrlizate.dart';
 import 'package:vrlizate_scene/vrlizate_scene.dart' show StereoHeadRig;
 
 import 'package:vrlizate_joystick/vrlizate_joystick.dart';
-import 'vr_phone_pointer_policy.dart';
+import '../../utils/constants/vr_home_constants.dart';
+
+/// Returns `true` when the spatial Library window is visible, not hidden by the
+/// user, within [maxHorizontalRadiusMeters] horizontally (covering the initial
+/// `4.8 m` spawn distance), and inside the viewer's forward cone.
+bool isHomeLibraryInFrontOfViewer({
+  required vm.Vector3 eyePosition,
+  required vm.Vector3 viewerForward,
+  required vm.Vector3 libraryPosition,
+  required bool libraryVisible,
+  required bool libraryHiddenByUser,
+  double maxHorizontalRadiusMeters = VrHomeConstants.mainMenuNearbyRadiusMeters,
+  double minForwardDot = VrHomeConstants.mainMenuMinForwardDot,
+}) {
+  if (libraryHiddenByUser || !libraryVisible) {
+    return false;
+  }
+  final dx = libraryPosition.x - eyePosition.x;
+  final dz = libraryPosition.z - eyePosition.z;
+  final horizontalDist = math.sqrt(dx * dx + dz * dz);
+  if (horizontalDist > maxHorizontalRadiusMeters || horizontalDist < 0.05) {
+    return false;
+  }
+  final dirX = dx / horizontalDist;
+  final dirZ = dz / horizontalDist;
+  final forwardLen = math.sqrt(
+    viewerForward.x * viewerForward.x + viewerForward.z * viewerForward.z,
+  );
+  if (forwardLen < 1e-4) return true;
+  final dot =
+      (dirX * (viewerForward.x / forwardLen)) +
+      (dirZ * (viewerForward.z / forwardLen));
+  return dot >= minForwardDot;
+}
 
 enum VrHomeGamepadAction {
   none,
@@ -22,13 +57,10 @@ bool shouldRevealHomePreparationOnMiss({
   required bool hasWorldModal,
 }) => controlsHidden && !hasWorldModal;
 
-/// Returns `true` only when a connected remote phone is actively pointing its
-/// 3DoF/touch laser ray AND that ray intersects an interactive Home target.
-///
-/// When the user holds the 2nd phone flat like a gamepad (even if 1-hand laser
-/// auto-switched or `laserX`/`laserY` retained an earlier offset) so the laser
-/// ray misses interactive cards/modals, head gaze continues to hover and button
-/// `A` falls back to head-gaze / focused-library-card activation.
+/// A connected phone owns hover only with a permitted pointer posture and an
+/// interactive hit. The shared pointer policy supplies [remoteLaserMode].
+/// Invalid/legacy posture, hidden feedback or a miss returns hover and button
+/// `A` to head gaze / focused-library-card activation, retaining locomotion.
 bool shouldLaserOwnHomeHover({
   required bool isRemoteConnected,
   required bool remoteLaserMode,

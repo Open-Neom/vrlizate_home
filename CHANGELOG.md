@@ -1,4 +1,8 @@
-## 1.0.0 - 2026-10-20
+## 1.0.0 - 2026-11-06
+
+- Require `vrlizate ^1.13.0`, which supplies `VrStickEdgeTurn` and the shared
+  edge-turn input state used by the spatial lobby, and connect `vrlizate_search` directly in `vrlizate_home` and its standalone reference player (`example/`).
+- Reserve two-line title layout and enlarged subtitle/badge typography in `640 × 424` library cover rasters (`VrDemoLibraryPanel`).
 
 - Promover `vrlizate_home` a la versión estable `1.0.0` bajo la estructura modular Open Neom (`lib/utils/constants/`, `lib/utils/enums/`, `lib/domain/models/`, `lib/ui/`).
 - Desactivar el enfoque central con clic automático por tiempo (`showReticle: false`, `onGazeSelect: null`) inmediatamente al detectar un smartphone Joystick o gamepad conectado, permitiendo observar letreros y tarjetas libremente sin entrar por accidente y seleccionando explícitamente con el botón `A`.

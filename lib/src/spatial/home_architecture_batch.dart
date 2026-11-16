@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:vrlizate_scene/vrlizate_scene.dart' show VrMeshTangents;
+
 import 'home_lobby_layout.dart';
 
 /// CPU-only static batching. A room/finish remains independently culled and
@@ -322,19 +324,21 @@ class _ArchitectureMeshBuilder {
   }
 
   static List<double> _bakeColor(List<double> color, List<double> normal) {
-    // Opposite the world's sunlight travel direction (-.3, -.8, .55).
+    // Opposite the world's sunlight travel direction (-.3, -.8, .55), paired
+    // with cool sky zenith fill and warm stone floor bounce for low/medium tiers.
     final sun =
         .22 *
         math.max(
           0.0,
           (normal[0] * .3 + normal[1] * .8 - normal[2] * .55) / _sunLength,
         );
-    final sky = .18 * (.5 + .5 * normal[1]);
-    const ambient = .68;
+    final sky = .19 * (.5 + .5 * normal[1]);
+    final bounce = .04 * math.max(0.0, -normal[1]);
+    const ambient = .66;
     return [
-      color[0] * (ambient + sky * .94 + sun),
-      color[1] * (ambient + sky * .98 + sun * .97),
-      color[2] * (ambient + sky + sun * .91),
+      color[0] * (ambient + sky * .93 + bounce * 1.08 + sun * 1.02),
+      color[1] * (ambient + sky * .98 + bounce * .98 + sun * .97),
+      color[2] * (ambient + sky * 1.03 + bounce * .86 + sun * .90),
       color[3],
     ];
   }
@@ -346,13 +350,24 @@ class _ArchitectureMeshBuilder {
         : math.pow((value + .055) / 1.055, 2.4).toDouble();
   }
 
-  HomeArchitectureMeshData finish() => HomeArchitectureMeshData(
-    Float32List.fromList(positions),
-    Float32List.fromList(normals),
-    Float32List.fromList(colors),
-    indices,
-    Float32List.fromList(textureCoordinates),
-  );
+  HomeArchitectureMeshData finish() {
+    final pos = Float32List.fromList(positions);
+    final nrm = Float32List.fromList(normals);
+    final uvs = Float32List.fromList(textureCoordinates);
+    return HomeArchitectureMeshData(
+      pos,
+      nrm,
+      Float32List.fromList(colors),
+      indices,
+      uvs,
+      VrMeshTangents.compute(
+        positions: pos,
+        normals: nrm,
+        texCoords: uvs,
+        indices: indices,
+      ),
+    );
+  }
 }
 
 class HomeArchitectureMeshData {
@@ -362,7 +377,8 @@ class HomeArchitectureMeshData {
     this.colors,
     this.indices,
     this.textureCoordinates,
+    this.tangents,
   );
-  final Float32List positions, normals, colors, textureCoordinates;
+  final Float32List positions, normals, colors, textureCoordinates, tangents;
   final List<int> indices;
 }

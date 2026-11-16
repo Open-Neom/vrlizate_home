@@ -3,11 +3,15 @@
 Combina la interfaz de `vrlizate_home` con el controlador, descubrimiento y visor
 de `vrlizate_apps`. Ejecuta entrada, temas, catálogo, lobby espacial y biblioteca
 `.vrlz` sin importar `VRlizate_app`, sus demos, Firebase ni sus servicios.
-Requiere Flutter 3.47 o posterior y `vrlizate ^1.13.0` para sus APIs de sesión.
+Requiere la combinación Flutter GPU indicada en `../../flutter-toolchain.json`
+y `vrlizate ^1.13.0` para sus APIs de sesión.
 
 ```sh
 flutter pub get
-FLUTTER_DART_DATA_ASSETS=false flutter run --profile -d macos
+flutter analyze --no-pub
+FLUTTER_DART_DATA_ASSETS=false flutter test --no-pub
+FLUTTER_DART_DATA_ASSETS=false flutter build apk --release --no-pub --target-platform android-arm64
+dart tool/verify_android_shaders.dart build/app/outputs/flutter-apk/app-release.apk
 ```
 
 **Probar sin visor → Galería portátil** abre el GLB incluido dentro de
@@ -44,3 +48,16 @@ callbacks explícitos para su bucle de renderizado.
 Home continúa presentando datos y callbacks; Apps descubre y valida los paquetes.
 Las pruebas de navegación usan un renderer sustituible para comprobar sesiones
 sin inicializar GPU; el renderizado nativo se comprueba por separado.
+
+## Dependencias portables
+
+`pubspec_overrides.yaml` del SDK enlaza los módulos y los forks de soporte dentro
+de la distribución. Conserva ese archivo al usar la plantilla. No necesita
+`VRlizate_app`, `wordsphere_plugin` vecino ni overrides personales. Los overrides
+de una dependencia no se heredan por otro host: un host propio debe incorporar
+las entradas correspondientes de este archivo. No copia cachés ni credenciales.
+
+Android SDK, JDK y Flutter se instalan por sus mecanismos habituales. El APK de
+esta plantilla usa firma de depuración para validación local. No contiene una
+clave de firma de publicación. Esta validación de compilación no certifica BLE,
+sensado o una instalación iOS; el host mínimo no inicializa esos servicios.

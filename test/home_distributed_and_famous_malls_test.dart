@@ -48,7 +48,21 @@ void main() {
         expect(space.canStand(wp.x, wp.z), isTrue, reason: wp.id);
       }
 
+      // Straight, uninterrupted walk from Lobby (0,0) -> Gallery -> Grand Plaza (0,18)
+      // with wide portals (4.8 m -> 6.8 m) and zero central chicane obstacles.
+      var straightPos = vm.Vector3(0, 1.6, 0);
+      for (var step = 0; step < 180; step++) {
+        straightPos = space.move(straightPos, 0, 0.1);
+        expect(space.canStand(straightPos.x, straightPos.z), isTrue);
+      }
+      expect(straightPos.z, closeTo(18.0, 1e-4));
+      expect(
+        space.roomAt(straightPos.x, straightPos.z)?.id,
+        'ecosystem_corridor',
+      );
+
       for (final portal in distributed.portals) {
+        expect(portal.doorHalfWidth * 2, greaterThanOrEqualTo(6.6));
         expect(
           space.canStand(portal.doorX, portal.doorZ),
           isTrue,
@@ -131,6 +145,7 @@ void main() {
             portal.doorX * portal.doorX + portal.doorZ * portal.doorZ,
           );
           expect(doorwayDist, lessThan(23.0), reason: portal.room.id);
+          expect(portal.doorHalfWidth * 2, greaterThanOrEqualTo(5.4 - 1e-9));
           expect(space.canStand(portal.doorX, portal.doorZ), isTrue);
           expect(space.canStand(portal.standingX, portal.standingZ), isTrue);
           expect(space.canStand(portal.outerX, portal.outerZ), isFalse);

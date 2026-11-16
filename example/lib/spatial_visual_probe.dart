@@ -18,8 +18,6 @@ import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate_home/vrlizate_home_spatial.dart';
 import 'package:vrlizate_scene/vrlizate_scene.dart';
-// ignore: implementation_imports
-import 'package:vrlizate_scene/src/vr_controller_feedback_visuals.dart';
 import 'package:vrlizate_avatar/vrlizate_avatar.dart';
 
 const _avatarSpeciesProbe = bool.fromEnvironment('AVATAR_SPECIES_PROBE');

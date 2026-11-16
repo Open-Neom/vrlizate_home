@@ -54,7 +54,9 @@ abstract final class VrHomeConstants {
   static const int portableWorldDefaultAccent = 0xFF63E6BE;
   static const String worldPortalEnterActionId = 'enter_world';
 
-  static const double mainMenuNearbyRadiusMeters = 4.5;
+  // Must cover HomeSpatialMetrics.libraryDistance (4.8 m) with step/head margin
+  // so initial spawn recognizes the Library window for A selection and L toggle.
+  static const double mainMenuNearbyRadiusMeters = 6.0;
   static const double mainMenuMinForwardDot = 0.32;
   static const double mainMenuFallbackDistanceMeters = 2.45;
 

@@ -391,6 +391,9 @@ class _ExamplePackageLibraryState extends State<_ExamplePackageLibrary>
     if (item.kind == VrlzPackageKind.retro) {
       return 'El runtime retro 2.5D no está instalado en este ejemplo.';
     }
+    if (item.kind == VrlzPackageKind.webgame) {
+      return 'El runtime de juegos web no está instalado en este ejemplo.';
+    }
     return null;
   }
 
@@ -424,6 +427,10 @@ class _ExamplePackageLibraryState extends State<_ExamplePackageLibrary>
       } else if (package.kind == VrlzPackageKind.retro) {
         throw StateError(
           'El runtime retro 2.5D no está instalado en este ejemplo.',
+        );
+      } else if (package.kind == VrlzPackageKind.webgame) {
+        throw StateError(
+          'El runtime de juegos web no está instalado en este ejemplo.',
         );
       } else if (package.kind == VrlzPackageKind.builtin &&
           package.demoId == 'gallery') {

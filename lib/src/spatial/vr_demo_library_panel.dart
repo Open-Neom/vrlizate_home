@@ -53,11 +53,12 @@ class VrLibraryArtwork {
       Paint()..color = theme.surface,
     );
     if (cover) {
-      final art = const Rect.fromLTWH(0, 0, 640, 232);
+      const art = Rect.fromLTWH(0, 0, 640, 168);
       canvas.save();
       canvas.clipRRect(
         RRect.fromRectAndRadius(bounds, const Radius.circular(24)),
       );
+      canvas.clipRect(art);
       canvas.drawRect(
         art,
         Paint()
@@ -81,36 +82,38 @@ class VrLibraryArtwork {
             ..strokeWidth = 2,
         );
       }
+      canvas.restore();
       _text(
         canvas,
         String.fromCharCode((icon ?? Icons.view_in_ar_rounded).codePoint),
-        const Offset(36, 54),
-        94,
+        const Offset(36, 26),
+        74,
         fontFamily: (icon ?? Icons.view_in_ar_rounded).fontFamily,
         width: 170,
       );
       _text(
         canvas,
         badge.toUpperCase(),
-        const Offset(38, 187),
-        20,
+        const Offset(38, 131),
+        24,
         color: Colors.white.withValues(alpha: .9),
         width: 560,
       );
       _text(
         canvas,
         title,
-        const Offset(30, 251),
-        43,
+        const Offset(30, 183),
+        46,
         width: 580,
         color: theme.foreground,
         weight: FontWeight.w700,
+        lines: 2,
       );
       _text(
         canvas,
         subtitle,
-        const Offset(30, 315),
-        29,
+        const Offset(30, 306),
+        34,
         width: 580,
         color: theme.muted,
         lines: 2,
@@ -248,6 +251,30 @@ class VrDemoLibraryPanel {
   bool owns(Node node) =>
       !_disposed && !busy && root.visible && _actions.containsKey(node);
   String? routeFor(Node node) => _routes[node];
+
+  /// Returns `true` when a world-space ray (with unit-length [direction])
+  /// passes through the Library panel or dock footprint closer than
+  /// [maxDistance], preventing portals/exhibits behind card gaps from stealing A.
+  bool occludesRay({
+    required vm.Vector3 origin,
+    required vm.Vector3 direction,
+    required double maxDistance,
+  }) {
+    if (_disposed || !root.visible || maxDistance <= 0.05) return false;
+    final inv = vm.Matrix4.copy(root.localTransform);
+    if (inv.invert() == 0.0) return false;
+    final localOrigin = inv.transform3(origin.clone());
+    final localUnitStep = inv.transform3(origin + direction) - localOrigin;
+    if (localUnitStep.z.abs() < 1e-6) return false;
+    final t = -localOrigin.z / localUnitStep.z;
+    if (t <= 0.05 || t >= maxDistance) return false;
+    final lx = localOrigin.x + localUnitStep.x * t;
+    final ly = localOrigin.y + localUnitStep.y * t;
+    const dockBottomLocalY = -1.49 - 0.14;
+    return lx.abs() <= width / 2 &&
+        ly >= dockBottomLocalY &&
+        ly <= height / 2;
+  }
 
   static Future<VrDemoLibraryPanel> create({
     required VrDemoCatalog catalog,

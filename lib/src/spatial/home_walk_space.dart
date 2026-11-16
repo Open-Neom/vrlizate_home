@@ -120,10 +120,83 @@ class HomeWalkSpace {
   }
 
   /// Small substeps prevent crossing a thin wall, even at diagonal approaches.
-  /// Axis sliding keeps walking parallel to a wall comfortable and predictable.
+  /// Axis sliding keeps walking parallel to a wall comfortable and predictable,
+  /// and threshold bevel-funneling gently guides shoulders past doorway jambs
+  /// (within 0.45 m of an open portal) so passages never snag the viewer.
   vm.Vector3 move(vm.Vector3 from, double dx, double dz) {
-    final moved = _physics.move(from, dx, dz);
+    if (!dx.isFinite || !dz.isFinite) return from;
+    var clampedDx = dx;
+    var clampedDz = dz;
+    final largest = math.max(clampedDx.abs(), clampedDz.abs());
+    if (largest > 0) {
+      final nx = clampedDx / largest;
+      final nz = clampedDz / largest;
+      final normLen = math.sqrt(nx * nx + nz * nz);
+      if (largest > _physics.maxMoveMeters / normLen) {
+        clampedDx = nx * _physics.maxMoveMeters / normLen;
+        clampedDz = nz * _physics.maxMoveMeters / normLen;
+      }
+    }
+    final requestedLen = math.sqrt(
+      clampedDx * clampedDx + clampedDz * clampedDz,
+    );
+    var moved = _physics.move(from, clampedDx, clampedDz);
+    if (identical(moved, from)) return from;
+
+    final actualDx = moved.x - from.x;
+    final actualDz = moved.z - from.z;
+    final actualLen = math.sqrt(actualDx * actualDx + actualDz * actualDz);
+    if (requestedLen > 1e-4 && actualLen < requestedLen * 0.35) {
+      if (clampedDz.abs() >= clampedDx.abs() && clampedDz.abs() > 1e-4) {
+        final side = _findOpenPassageLateral(
+          moved.x,
+          moved.z,
+          alongZ: true,
+          forwardSign: clampedDz.sign,
+        );
+        if (side != 0) {
+          final nudge = side * math.min(requestedLen, 0.14);
+          moved = _physics.move(from, clampedDx + nudge, clampedDz);
+        }
+      } else if (clampedDx.abs() > 1e-4) {
+        final side = _findOpenPassageLateral(
+          moved.x,
+          moved.z,
+          alongZ: false,
+          forwardSign: clampedDx.sign,
+        );
+        if (side != 0) {
+          final nudge = side * math.min(requestedLen, 0.14);
+          moved = _physics.move(from, clampedDx, clampedDz + nudge);
+        }
+      }
+    }
+
     // Home owns its fixed seated eye height; collision is renderer-neutral.
-    return identical(moved, from) ? from : (moved..y = 1.6);
+    return moved..y = 1.6;
+  }
+
+  double _findOpenPassageLateral(
+    double x,
+    double z, {
+    required bool alongZ,
+    required double forwardSign,
+  }) {
+    const forwardProbe = 0.36;
+    for (final offset in const [0.15, 0.30, 0.45]) {
+      final negOpen = alongZ
+          ? canStand(x - offset, z) &&
+                canStand(x - offset, z + forwardSign * forwardProbe)
+          : canStand(x, z - offset) &&
+                canStand(x + forwardSign * forwardProbe, z - offset);
+      final posOpen = alongZ
+          ? canStand(x + offset, z) &&
+                canStand(x + offset, z + forwardSign * forwardProbe)
+          : canStand(x, z + offset) &&
+                canStand(x + forwardSign * forwardProbe, z + offset);
+      if (negOpen && !posOpen) return -1.0;
+      if (posOpen && !negOpen) return 1.0;
+    }
+    return 0.0;
   }
 }

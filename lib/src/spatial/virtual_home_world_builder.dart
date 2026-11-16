@@ -141,7 +141,7 @@ class VirtualHomeWorldBuilder {
     _setupEcosystem(root);
     _setupShowcases(scene, root);
     scene.add(root);
-    _setupLabels(root, generation);
+    _setupLabels(scene, root, generation);
   }
 
   void setShadowsEnabled(
@@ -277,17 +277,20 @@ class VirtualHomeWorldBuilder {
       HomeLobbyFinish.rug: theme.muted.toARGB32(),
     };
     const roughness = <HomeLobbyFinish, double>{
-      HomeLobbyFinish.stone: .84,
-      HomeLobbyFinish.plaster: .95,
-      HomeLobbyFinish.oak: .8,
-      HomeLobbyFinish.trim: .74,
-      HomeLobbyFinish.fabric: .98,
-      HomeLobbyFinish.rug: 1,
+      HomeLobbyFinish.stone: .66,
+      HomeLobbyFinish.plaster: .88,
+      HomeLobbyFinish.oak: .64,
+      HomeLobbyFinish.trim: .38,
+      HomeLobbyFinish.fabric: .94,
+      HomeLobbyFinish.rug: .96,
     };
     final materials = {
       for (final finish in HomeLobbyFinish.values)
-        finish: _matte(0xFFFFFFFF, roughness: roughness[finish]!)
-          ..vertexColorWeight = 1,
+        finish: _matte(
+          0xFFFFFFFF,
+          roughness: roughness[finish]!,
+          metallic: finish == HomeLobbyFinish.trim ? .38 : 0,
+        )..vertexColorWeight = 1,
     };
     final bakedMaterials = {
       for (final finish in HomeLobbyFinish.values)
@@ -407,8 +410,10 @@ class VirtualHomeWorldBuilder {
     for (final portal in ecosystemLayout.portals) {
       final room = portal.room;
       final accent = _matte(
-        Color.lerp(Color(room.accent), Colors.black, .65)!.toARGB32(),
-        roughness: .65,
+        Color.lerp(Color(room.accent), Colors.black, .58)!.toARGB32(),
+        roughness: .38,
+        metallic: .35,
+        emissiveBoost: .06,
       );
       final terminal =
           Node(
@@ -441,11 +446,35 @@ class VirtualHomeWorldBuilder {
           exhibit.z,
         ).multiplied(vm.Matrix4.rotationY(exhibit.yaw));
       root.add(group);
-      final material = _matte(exhibit.accent, roughness: 0.55);
-      void part(String name, Geometry geometry, double x, double y, double z) {
+      final material = _matte(
+        exhibit.accent,
+        roughness: 0.34,
+        metallic: 0.28,
+        emissiveBoost: 0.08,
+      );
+      final pedestalMaterial = _matte(
+        Color.lerp(Color(exhibit.accent), const Color(0xFF1A2430), .74)!
+            .toARGB32(),
+        roughness: 0.42,
+        metallic: 0.36,
+      );
+      final glowMaterial = _matte(
+        exhibit.accent,
+        roughness: 0.22,
+        metallic: 0.18,
+        emissiveBoost: 0.24,
+      );
+      void part(
+        String name,
+        Geometry geometry,
+        double x,
+        double y,
+        double z, {
+        PhysicallyBasedMaterial? overrideMaterial,
+      }) {
         final node = Node(
           name: '${exhibit.id}_$name',
-          mesh: Mesh(geometry, material),
+          mesh: Mesh(geometry, overrideMaterial ?? material),
         )..localTransform = vm.Matrix4.translationValues(x, y, z);
         group.add(node);
         _exhibits[node] = exhibit;
@@ -455,14 +484,15 @@ class VirtualHomeWorldBuilder {
         case 'planet':
           part(
             'planet',
-            SphereGeometry(radius: 0.47, segments: 16, rings: 10),
+            SphereGeometry(radius: 0.47, segments: 24, rings: 16),
             0,
             1.4,
             0,
+            overrideMaterial: glowMaterial,
           );
           part(
             'ring',
-            RingGeometry(innerRadius: 0.62, outerRadius: 0.78, segments: 24),
+            RingGeometry(innerRadius: 0.62, outerRadius: 0.78, segments: 32),
             0,
             1.4,
             0,
@@ -476,6 +506,7 @@ class VirtualHomeWorldBuilder {
               (i - 1) * 0.48,
               0.78 + height / 2,
               0,
+              overrideMaterial: i == 2 ? glowMaterial : material,
             );
           }
         case 'materials':
@@ -484,12 +515,13 @@ class VirtualHomeWorldBuilder {
               'gem_$i',
               SphereGeometry(
                 radius: 0.28,
-                segments: 6 + i * 3,
-                rings: 4 + i * 2,
+                segments: 12 + i * 6,
+                rings: 8 + i * 4,
               ),
               (i - 1) * 0.55,
               1.15 + (i == 1 ? 0.3 : 0),
               0,
+              overrideMaterial: i == 1 ? glowMaterial : material,
             );
           }
         case 'kiosk_visor':
@@ -499,6 +531,7 @@ class VirtualHomeWorldBuilder {
             0,
             0.475,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           part(
             'visor_shell',
@@ -510,10 +543,11 @@ class VirtualHomeWorldBuilder {
           for (final side in const [-1.0, 1.0]) {
             part(
               'lens_$side',
-              SphereGeometry(radius: 0.075, segments: 12, rings: 8),
+              SphereGeometry(radius: 0.075, segments: 18, rings: 12),
               side * 0.11,
               1.38,
               0.14,
+              overrideMaterial: glowMaterial,
             );
           }
           part(
@@ -530,13 +564,15 @@ class VirtualHomeWorldBuilder {
             0,
             0.475,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           part(
             'wheel_ring',
-            RingGeometry(innerRadius: 0.22, outerRadius: 0.32, segments: 20),
+            RingGeometry(innerRadius: 0.22, outerRadius: 0.32, segments: 28),
             0,
             1.42,
             0,
+            overrideMaterial: glowMaterial,
           );
           part(
             'chassis',
@@ -552,6 +588,7 @@ class VirtualHomeWorldBuilder {
             0,
             0.575,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           part(
             'cabinet_screen',
@@ -559,14 +596,16 @@ class VirtualHomeWorldBuilder {
             0,
             1.36,
             0.08,
+            overrideMaterial: glowMaterial,
           );
           for (final side in const [-1.0, 1.0]) {
             part(
               'gem_$side',
-              SphereGeometry(radius: 0.12, segments: 8, rings: 6),
+              SphereGeometry(radius: 0.12, segments: 16, rings: 12),
               side * 0.36,
               1.25,
               0,
+              overrideMaterial: glowMaterial,
             );
           }
         case 'kiosk_strategy':
@@ -576,6 +615,7 @@ class VirtualHomeWorldBuilder {
             0,
             0.475,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           for (var i = 0; i < 3; i++) {
             part(
@@ -588,10 +628,11 @@ class VirtualHomeWorldBuilder {
           }
           part(
             'crest_orb',
-            SphereGeometry(radius: 0.16, segments: 12, rings: 8),
+            SphereGeometry(radius: 0.16, segments: 20, rings: 14),
             0,
             1.56,
             0,
+            overrideMaterial: glowMaterial,
           );
         case 'kiosk_worlds':
           part(
@@ -600,10 +641,11 @@ class VirtualHomeWorldBuilder {
             0,
             0.475,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           part(
             'mountain_peak',
-            SphereGeometry(radius: 0.28, segments: 12, rings: 8),
+            SphereGeometry(radius: 0.28, segments: 20, rings: 14),
             -0.12,
             1.22,
             0,
@@ -614,6 +656,7 @@ class VirtualHomeWorldBuilder {
             0.18,
             1.28,
             0,
+            overrideMaterial: glowMaterial,
           );
         case 'kiosk_labs':
           part(
@@ -622,14 +665,16 @@ class VirtualHomeWorldBuilder {
             0,
             0.475,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           for (final side in const [-1.0, 1.0]) {
             part(
               'probe_sphere_$side',
-              SphereGeometry(radius: 0.19, segments: 14, rings: 10),
+              SphereGeometry(radius: 0.19, segments: 20, rings: 14),
               side * 0.22,
               1.36,
               0,
+              overrideMaterial: glowMaterial,
             );
           }
           part(
@@ -648,6 +693,7 @@ class VirtualHomeWorldBuilder {
               side * 0.92,
               0.975,
               0,
+              overrideMaterial: pedestalMaterial,
             );
           }
           part(
@@ -656,17 +702,19 @@ class VirtualHomeWorldBuilder {
             0,
             1.98,
             0,
+            overrideMaterial: pedestalMaterial,
           );
           part(
             'portal_globe',
-            SphereGeometry(radius: 0.42, segments: 16, rings: 10),
+            SphereGeometry(radius: 0.42, segments: 24, rings: 16),
             0,
             1.25,
             0,
+            overrideMaterial: glowMaterial,
           );
           part(
             'compass_ring',
-            RingGeometry(innerRadius: 0.54, outerRadius: 0.68, segments: 24),
+            RingGeometry(innerRadius: 0.54, outerRadius: 0.68, segments: 32),
             0,
             1.25,
             0,
@@ -678,14 +726,16 @@ class VirtualHomeWorldBuilder {
         0,
         2.35,
         0.04,
+        overrideMaterial: pedestalMaterial,
       );
     }
   }
 
-  Future<void> _setupLabels(Node root, int generation) async {
+  Future<void> _setupLabels(Scene scene, Node root, int generation) async {
     try {
       await Scene.initializeStaticResources();
       if (!Scene.isReadyToRender || generation != _generation) return;
+      _installThemeSkyEnvironment(scene);
       for (final exhibit in exhibits) {
         final actionHint = exhibit.id == 'mall_directory'
             ? 'A · Cambiar de Plaza Famosa'
@@ -729,7 +779,7 @@ class VirtualHomeWorldBuilder {
           label.node.localTransform =
               vm.Matrix4.translationValues(
                   atDoor ? portal.signX : portal.terminalX,
-                  atDoor ? 3.55 : 1.85,
+                  atDoor ? 3.68 : 1.85,
                   atDoor ? portal.signZ : portal.terminalZ,
                 )
                 ..rotateY(portal.yaw)
@@ -773,14 +823,14 @@ class VirtualHomeWorldBuilder {
         if (ecosystemLayout.portals.isNotEmpty) {
           final sign = await _createRoomSign(
             plazaBannerText ?? 'PLAZA VRLIZATE\nExplora sus espacios',
-            height: .42,
-            maxWorldWidth: 2.1,
+            height: .44,
+            maxWorldWidth: 2.6,
             maxLines: 2,
             maxWidthPx: 1300,
             name: 'ecosystem_wing_sign',
           );
           if (generation != _generation) return;
-          sign.node.localTransform = vm.Matrix4.translationValues(0, 3.7, 12.34)
+          sign.node.localTransform = vm.Matrix4.translationValues(0, 3.82, 12.34)
             ..rotateY(math.pi)
             ..rotateX(math.pi / 2)
             ..scaleByVector3(vm.Vector3(-1, 1, 1));
@@ -893,17 +943,72 @@ class VirtualHomeWorldBuilder {
     _architecture.clear();
   }
 
-  PhysicallyBasedMaterial _matte(int argb, {required double roughness}) {
+  void _installThemeSkyEnvironment(Scene scene) {
+    final zenith = Color.lerp(
+      const Color(0xFF4F82B8),
+      theme.secondary,
+      .38,
+    )!;
+    final horizon = Color.lerp(
+      const Color(0xFFD8E8F4),
+      theme.foreground,
+      .28,
+    )!;
+    final ground = Color.lerp(
+      theme.surface,
+      const Color(0xFF6B655D),
+      .35,
+    )!;
+    final sky = GradientSkySource(
+      zenithColor: vm.Vector3(
+        _linearChannel(zenith.r),
+        _linearChannel(zenith.g),
+        _linearChannel(zenith.b),
+      ),
+      horizonColor: vm.Vector3(
+        _linearChannel(horizon.r),
+        _linearChannel(horizon.g),
+        _linearChannel(horizon.b),
+      ),
+      groundColor: vm.Vector3(
+        _linearChannel(ground.r),
+        _linearChannel(ground.g),
+        _linearChannel(ground.b),
+      ),
+      sunDirection: vm.Vector3(0.3, 0.8, -0.55)..normalize(),
+      sunColor: vm.Vector3(1.55, 1.46, 1.28),
+      sunSharpness: 320,
+    );
+    scene
+      ..skybox = Skybox(sky)
+      ..skyEnvironment = SkyEnvironment(
+        sky,
+        faceResolution: 64,
+        equirectWidth: 256,
+      )
+      ..environmentIntensity = 0.82;
+  }
+
+  PhysicallyBasedMaterial _matte(
+    int argb, {
+    required double roughness,
+    double metallic = 0,
+    double emissiveBoost = 0,
+  }) {
     final color = Color(argb);
+    final r = _linearChannel(color.r);
+    final g = _linearChannel(color.g);
+    final b = _linearChannel(color.b);
     return PhysicallyBasedMaterial()
-      ..baseColorFactor = vm.Vector4(
-        _linearChannel(color.r),
-        _linearChannel(color.g),
-        _linearChannel(color.b),
+      ..baseColorFactor = vm.Vector4(r, g, b, 1)
+      ..roughnessFactor = roughness
+      ..metallicFactor = metallic
+      ..emissiveFactor = vm.Vector4(
+        r * emissiveBoost,
+        g * emissiveBoost,
+        b * emissiveBoost,
         1,
       )
-      ..roughnessFactor = roughness
-      ..metallicFactor = 0
       ..vertexColorWeight = 0;
   }
 
@@ -1054,6 +1159,7 @@ class _HomeArchitectureVariant {
         positions: data.positions,
         normals: data.normals,
         texCoords: data.textureCoordinates,
+        tangents: data.tangents,
         colors: data.colors,
         indices: data.indices,
       ),

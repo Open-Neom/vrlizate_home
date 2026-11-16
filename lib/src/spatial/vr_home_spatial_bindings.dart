@@ -28,6 +28,8 @@ enum VrHomeActionType {
   recenter,
   switchCatalog2D,
   conversationalGuidance,
+  moveInSpace,
+  goToPoint,
 }
 
 class VrHomeGuidance {
@@ -39,6 +41,15 @@ class VrHomeGuidance {
     this.targetDemoTitle,
     this.targetLook,
     this.targetPreset,
+    this.stickX = 0.0,
+    this.stickY = 0.0,
+    this.turnRate = 0.0,
+    this.durationSeconds = 0.0,
+    this.targetPointQuery,
+    this.targetX,
+    this.targetZ,
+    this.distanceMeters,
+    this.useGazeTarget = false,
   });
 
   final VrHomeActionType actionType;
@@ -46,6 +57,15 @@ class VrHomeGuidance {
   final String? targetWingId, targetDemoId, targetDemoTitle;
   final VrLook? targetLook;
   final VrQualityPreset? targetPreset;
+  final double stickX;
+  final double stickY;
+  final double turnRate;
+  final double durationSeconds;
+  final String? targetPointQuery;
+  final double? targetX;
+  final double? targetZ;
+  final double? distanceMeters;
+  final bool useGazeTarget;
 }
 
 class VrHomePrompt {

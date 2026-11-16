@@ -4,19 +4,21 @@ import 'package:flutter_scene/scene.dart';
 import 'home_lobby_layout.dart';
 import 'home_surface_texture_data.dart';
 
-/// Three shared 256px finishes, independent of the app's assets and services.
-/// Low/medium uploads color only (~1 MiB with mips for all three). Detail maps
-/// are lazy and add ~2 MiB on the first high-quality visit. No per-frame work.
+/// Shared 256px procedural PBR finishes, independent of app assets and services.
+/// Low/medium uploads color only; detail maps (normal + glTF ORM occlusion /
+/// roughness / metallic) are lazy and uploaded once on high/ultra visits.
 abstract final class HomeSurfaceTextures {
   static final _pixels = <HomeSurface, Future<HomeSurfaceTextureData>>{};
   static final _colors = <HomeSurface, Future<Texture2D>>{};
   static final _details = <HomeSurface, Future<(Texture2D, Texture2D)>>{};
-  static const _sampling = TextureSampling(maxAnisotropy: 4);
+  static const _sampling = TextureSampling(maxAnisotropy: 8);
 
   static HomeSurface surfaceFor(HomeLobbyFinish finish) => switch (finish) {
     HomeLobbyFinish.stone => HomeSurface.limestone,
     HomeLobbyFinish.oak => HomeSurface.oak,
-    _ => HomeSurface.plaster,
+    HomeLobbyFinish.trim => HomeSurface.brushedMetal,
+    HomeLobbyFinish.fabric || HomeLobbyFinish.rug => HomeSurface.wovenFabric,
+    HomeLobbyFinish.plaster => HomeSurface.plaster,
   };
 
   static Future<HomeSurfaceTextureData> _data(HomeSurface surface) =>
@@ -86,12 +88,15 @@ abstract final class HomeSurfaceTextures {
     pbr.baseColorTexture = color;
     baked.baseColorTexture = color;
     if (!details) return;
-    final (normal, roughness) = await _detail(surface);
+    final (normal, orm) = await _detail(surface);
     if (!isCurrent()) return;
     pbr
       ..normalTexture = normal
-      ..normalScale = .55
-      ..metallicRoughnessTexture = roughness
-      ..roughnessFactor = 1;
+      ..normalScale = .72
+      ..metallicRoughnessTexture = orm
+      ..occlusionTexture = orm
+      ..occlusionStrength = .72
+      ..roughnessFactor = 1
+      ..metallicFactor = finish == HomeLobbyFinish.trim ? 1 : 0;
   }
 }

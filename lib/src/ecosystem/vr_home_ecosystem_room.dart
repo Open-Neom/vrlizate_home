@@ -148,6 +148,20 @@ class VrHomeEcosystemRoom {
     terminalActionLabel: 'A · Viajar a Plazas Famosas',
   );
 
+  /// Opt-in Multiplex pavilion for free 24/7 linear FAST channels, public-domain
+  /// & official YouTube films/series, and verified external FAST portals.
+  static const freeStreamingTv = VrHomeEcosystemRoom(
+    id: 'free_streaming_tv',
+    title: 'Multiplex TV & Cine Gratis',
+    description:
+        'Canales 24/7 con guía EPG en vivo, cine UNAM/clásico, series y portales FAST (Pluto TV, Tubi, ViX).',
+    accent: 0xFF00E5FF,
+    icon: VrHomeRoomIcon.movie,
+    purpose: VrHomeRoomPurpose.cinema,
+    doorBadge: 'TV GRATIS 24/7 · EPG EN VIVO',
+    terminalActionLabel: 'A · Entrar a TV & Cine Gratis',
+  );
+
   static const defaults = <VrHomeEcosystemRoom>[
     VrHomeEcosystemRoom(
       id: 'profile',

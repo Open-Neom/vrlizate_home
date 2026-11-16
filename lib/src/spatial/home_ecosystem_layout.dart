@@ -85,7 +85,7 @@ class HomeEcosystemPortal {
   double get terminalDepth => isNorthSouth ? .14 : 2.3;
   double get inwardForwardX => isNorthSouth ? 0.0 : side;
   double get inwardForwardZ => isNorthSouth ? zSide : 0.0;
-  double get displayOffset => roomHalfFrontage * .7;
+  double get displayOffset => roomHalfFrontage * .8;
   double get doorHalfWidth =>
       _customDoorHalfWidth ?? HomeEcosystemLayout.doorHalfWidth;
   double get yaw => switch (facing) {
@@ -106,8 +106,8 @@ class HomeEcosystemLayout {
   static const rowPitch = 14.0;
   static const firstRowZ = 24.0;
   static const entryZ = 12.5;
-  static const entryHalfWidth = 2.0;
-  static const doorHalfWidth = 2.2;
+  static const entryHalfWidth = 3.4;
+  static const doorHalfWidth = 3.3;
   static const arcadeX = 11.5;
   static const cruciformCenterZ = 36.0;
   static const cruciformHalfWidth = 6.5;
@@ -217,10 +217,9 @@ class HomeEcosystemLayout {
       );
     }
 
-    // The original gallery keeps its doorway. Beyond the lintel the ceiling
-    // rises and the floor opens to a 30 m arrival square. The original gallery
-    // joins through a wider opening without moving its exhibits or library.
-    const galleryOuterX = 3.9;
+    // Beyond the lintel the ceiling rises and the floor opens to a 30 m arrival
+    // square. The gallery joins through a wide 6.8 m grand portal.
+    const galleryOuterX = 4.9;
     const entryPierWidth = galleryOuterX - entryHalfWidth;
     const entryPierX = (galleryOuterX + entryHalfWidth) / 2;
     box('entry_left', -entryPierX, 2.3, entryZ, entryPierWidth, 4.6, .2);
@@ -228,10 +227,10 @@ class HomeEcosystemLayout {
     box(
       'entry_lintel',
       0,
-      3.8,
+      3.95,
       entryZ,
       entryHalfWidth * 2,
-      1.6,
+      1.3,
       .2,
       HomeLobbyFinish.oak,
     );
@@ -736,10 +735,10 @@ class HomeEcosystemLayout {
       addBox(
         '${room.id}_door_lintel',
         wallCoord,
-        3.8,
+        3.95,
         alongCoord,
         .2,
-        1.6,
+        1.3,
         actualDoorHalfWidth * 2,
         HomeLobbyFinish.oak,
       );
@@ -814,10 +813,10 @@ class HomeEcosystemLayout {
       addBox(
         '${room.id}_door_lintel',
         alongCoord,
-        3.8,
+        3.95,
         wallCoord,
         actualDoorHalfWidth * 2,
-        1.6,
+        1.3,
         .2,
         HomeLobbyFinish.oak,
       );
@@ -898,30 +897,30 @@ class HomeEcosystemLayout {
         'display_sill_$direction',
         2.5,
         .5,
-        direction * 2.1,
+        direction * 2.4,
         .2,
         1,
-        1.8,
+        1.2,
         HomeLobbyFinish.plaster,
       );
       part(
         'display_header_$direction',
         2.5,
-        3.8,
-        direction * 2.1,
+        3.95,
+        direction * 2.4,
         .2,
-        1.6,
-        1.8,
+        1.3,
+        1.2,
         HomeLobbyFinish.plaster,
       );
       part(
         'door_pillar_$direction',
         2.5,
-        1.5,
-        direction * 1.28,
-        .28,
-        3,
-        .16,
+        1.65,
+        direction * 1.86,
+        .22,
+        3.3,
+        .12,
         HomeLobbyFinish.trim,
         null,
         HomeLobbyShape.cylinder,
@@ -930,7 +929,7 @@ class HomeEcosystemLayout {
         'display_frame_$direction',
         2.5,
         2,
-        direction * 2.91,
+        direction * 2.94,
         .25,
         2,
         .12,
@@ -940,38 +939,38 @@ class HomeEcosystemLayout {
         'window_ledge_$direction',
         2.42,
         1.03,
-        direction * 2.13,
+        direction * 2.42,
         .42,
         .08,
-        1.65,
+        1.08,
         HomeLobbyFinish.oak,
       );
     }
     part(
       'fascia',
       2.35,
-      3.6,
+      3.72,
       0,
       .38,
-      .82,
-      3.5,
+      .76,
+      3.8,
       HomeLobbyFinish.oak,
       room.isForLease ? 0xFF78350F : null,
     );
     part(
       'canopy',
       2.25,
-      3.05,
+      3.22,
       0,
       .8,
       .14,
-      3.8,
+      4.0,
       HomeLobbyFinish.trim,
       room.isForLease ? 0xFFF59E0B : null,
       HomeLobbyShape.beveledBox,
     );
-    part('threshold', 3.05, .012, 0, 1.05, .024, 2.3, HomeLobbyFinish.trim);
-    part('interior_inlay', 6.4, .009, 0, 5.6, .018, 2.1, HomeLobbyFinish.rug);
+    part('threshold', 3.05, .012, 0, 1.05, .024, 3.5, HomeLobbyFinish.trim);
+    part('interior_inlay', 6.4, .009, 0, 5.6, .018, 3.0, HomeLobbyFinish.rug);
 
     if (room.isForLease) {
       for (var p = 0; p < 5; p++) {
@@ -1825,8 +1824,8 @@ class HomeEcosystemLayout {
       );
     }
 
-    // Entry archway from the Gallery into the Arrival Square.
-    const galleryOuterX = 3.9;
+    // Entry archway from the Gallery into the Arrival Square (6.8 m portal).
+    const galleryOuterX = 4.9;
     const entryPierWidth = galleryOuterX - entryHalfWidth;
     const entryPierX = (galleryOuterX + entryHalfWidth) / 2;
     pBox('entry_left', -entryPierX, 2.3, entryZ, entryPierWidth, 4.6, .2);
@@ -1834,10 +1833,10 @@ class HomeEcosystemLayout {
     pBox(
       'entry_lintel',
       0,
-      3.8,
+      3.95,
       entryZ,
       entryHalfWidth * 2,
-      1.6,
+      1.3,
       .2,
       HomeLobbyFinish.oak,
     );

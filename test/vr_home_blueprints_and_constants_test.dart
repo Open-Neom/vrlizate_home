@@ -1,5 +1,8 @@
+import 'package:flutter_scene/scene.dart' show Node;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate_home/vrlizate_home.dart';
+import 'package:vrlizate_home/vrlizate_home_spatial.dart';
 
 void main() {
   group('VrHomeZoneKind & VrHomeRoomBlueprint', () {
@@ -83,5 +86,114 @@ void main() {
       expect(VrHomeConstants.startVisorKey, 'start_visor');
       expect(VrHomeConstants.startControllerKey, 'start_controller');
     });
+
+    test(
+      'initial Library spawn distance (4.8 m) is within mainMenuNearbyRadiusMeters for A/L actions and occludes background portals',
+      () async {
+        expect(
+          VrHomeConstants.mainMenuNearbyRadiusMeters,
+          greaterThanOrEqualTo(HomeSpatialMetrics.libraryDistance + 1.0),
+        );
+
+        final eye = vm.Vector3(0, 1.60, 0);
+        final libraryPos = vm.Vector3(
+          0,
+          1.67,
+          -HomeSpatialMetrics.libraryDistance,
+        );
+        expect(
+          isHomeLibraryInFrontOfViewer(
+            eyePosition: eye,
+            viewerForward: vm.Vector3(0, 0, -1),
+            libraryPosition: libraryPos,
+            libraryVisible: true,
+            libraryHiddenByUser: false,
+          ),
+          isTrue,
+        );
+        expect(
+          isHomeLibraryInFrontOfViewer(
+            eyePosition: eye,
+            viewerForward: vm.Vector3(0, 0, 1),
+            libraryPosition: libraryPos,
+            libraryVisible: true,
+            libraryHiddenByUser: false,
+          ),
+          isFalse,
+        );
+        expect(
+          isHomeLibraryInFrontOfViewer(
+            eyePosition: vm.Vector3(0, 1.60, 3.0),
+            viewerForward: vm.Vector3(0, 0, -1),
+            libraryPosition: libraryPos,
+            libraryVisible: true,
+            libraryHiddenByUser: false,
+          ),
+          isFalse,
+          reason: '7.8 m exceeds mainMenuNearbyRadiusMeters (6.0 m)',
+        );
+        expect(
+          isHomeLibraryInFrontOfViewer(
+            eyePosition: eye,
+            viewerForward: vm.Vector3(0, 0, -1),
+            libraryPosition: libraryPos,
+            libraryVisible: true,
+            libraryHiddenByUser: true,
+          ),
+          isFalse,
+        );
+
+        final opened = <String>[];
+        final panel = await VrDemoLibraryPanel.create(
+          catalog: VrDemoCatalog(const <VrDemoLibraryEntry>[
+            VrDemoLibraryEntry(
+              id: 'riviera_rush',
+              title: 'Riviera Rush VR',
+              subtitle: 'Conducción costera',
+              category: VrDemoLibraryCategory.games,
+              accent: 0xFF00E5FF,
+              icon: 'motorsport',
+              featured: true,
+            ),
+          ]),
+          onOpen: (entry) => opened.add(entry.id),
+          onAction: (_) {},
+          boxBuilder: (_, _, _, _) => Node(),
+          surfaceBuilder: (_, _, _) async => Node(),
+        );
+        addTearDown(panel.dispose);
+
+        // Horizontal gaze hits y_local = -0.0795 (inter-row gap) at t = 4.8 m.
+        // Background portal at 12.0 m is occluded, closer object at 2.5 m is not.
+        expect(
+          panel.occludesRay(
+            origin: eye,
+            direction: vm.Vector3(0, 0, -1),
+            maxDistance: 12.0,
+          ),
+          isTrue,
+        );
+        expect(
+          panel.occludesRay(
+            origin: eye,
+            direction: vm.Vector3(0, 0, -1),
+            maxDistance: 2.5,
+          ),
+          isFalse,
+        );
+        expect(
+          panel.occludesRay(
+            origin: eye,
+            direction: vm.Vector3(0.75, 0, -0.66)..normalize(),
+            maxDistance: 12.0,
+          ),
+          isFalse,
+          reason: 'Ray aimed well beside the 3.94 * 0.88 panel is not occluded',
+        );
+
+        panel.activateFocused();
+        expect(opened, <String>['riviera_rush']);
+      },
+    );
   });
 }

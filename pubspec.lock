@@ -738,6 +738,13 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  vrlizate_search:
+    dependency: "direct main"
+    description:
+      path: "../vrlizate_search"
+      relative: true
+    source: path
+    version: "1.0.0"
   vrlizate_spatial_audio:
     dependency: "direct overridden"
     description:
@@ -775,13 +782,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.1"
-  wordsphere:
-    dependency: "direct overridden"
-    description:
-      path: "../../../wordsphere_plugin"
-      relative: true
-    source: path
-    version: "1.0.0"
   xdg_directories:
     dependency: transitive
     description:

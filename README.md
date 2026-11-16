@@ -68,3 +68,12 @@ FLUTTER_DART_DATA_ASSETS=false flutter run --profile -d macos
 ## Licencia
 
 Apache License 2.0 — consulta [LICENSE](LICENSE).
+
+## Phone pointer feedback
+
+Home shares `VrPhonePointerPolicy` from `vrlizate_joystick`. The phone feedback,
+beam, reticle, raycast and hover ownership use the same gate, including restoration
+after assistant capture. Connecting a controller or retaining old aim offsets
+alone cannot show a ray. Invalid/legacy posture returns hover to head gaze and
+keeps the explicit A-button fallback and locomotion. Update the phone sender and
+receiver together; inclination alone cannot confirm real heading toward a visor.
