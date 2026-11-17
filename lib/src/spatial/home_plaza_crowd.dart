@@ -38,13 +38,15 @@ final class HomePlazaVisitorState {
   double x;
   double z;
   double yaw;
+  double vx = 0.0;
+  double vz = 0.0;
   int targetIndex = 1;
   double pauseRemaining = 0.0;
   bool greetingPlayer = false;
   VrAvatarPose pose = VrAvatarPose.neutral;
 
   void step(double time, double dt, vm.Vector3? playerEye) {
-    final stepDt = dt.isFinite ? dt.clamp(0.0, 0.1) : 0.0;
+    final stepDt = dt.isFinite ? dt.clamp(0.0, 0.25) : 0.0;
     final blinkWave = math.sin(time * 0.9 + phaseOffset * 3.1);
     final blink = blinkWave > 0.985 ? ((blinkWave - 0.985) / 0.015) : 0.0;
 
@@ -56,6 +58,8 @@ final class HomePlazaVisitorState {
       final distSq = dx * dx + dz * dz;
       if (distSq <= 3.4 * 3.4 && distSq > 0.04) {
         greetingPlayer = true;
+        vx = 0.0;
+        vz = 0.0;
         final desiredYaw = math.atan2(dx, dz);
         yaw = _lerpAngle(yaw, desiredYaw, (stepDt * 5.5).clamp(0.0, 1.0));
         pose = VrAvatarPose.wave(
@@ -70,6 +74,8 @@ final class HomePlazaVisitorState {
     greetingPlayer = false;
 
     if (conversationalist || routePoints.length < 2) {
+      vx = 0.0;
+      vz = 0.0;
       final baseYaw = partnerYaw ?? yaw;
       yaw = _lerpAngle(yaw, baseYaw, (stepDt * 3.0).clamp(0.0, 1.0));
       final gesturePhase = time * 1.65 + phaseOffset;
@@ -92,6 +98,8 @@ final class HomePlazaVisitorState {
     }
 
     if (pauseRemaining > 0) {
+      vx = 0.0;
+      vz = 0.0;
       pauseRemaining = math.max(0.0, pauseRemaining - stepDt);
       final idx =
           (targetIndex - 1 + routePoints.length) % routePoints.length;
@@ -117,6 +125,8 @@ final class HomePlazaVisitorState {
     if (dist <= 0.22) {
       x = target.x;
       z = target.z;
+      vx = 0.0;
+      vz = 0.0;
       final reachedIdx = targetIndex % routePoints.length;
       targetIndex = (targetIndex + 1) % routePoints.length;
       if (storefrontLookYaw[reachedIdx] != null) {
@@ -130,6 +140,8 @@ final class HomePlazaVisitorState {
     final nz = dz / dist;
     x += nx * step;
     z += nz * step;
+    vx = nx * walkSpeed;
+    vz = nz * walkSpeed;
     final travelYaw = math.atan2(nx, nz);
     yaw = _lerpAngle(yaw, travelYaw, (stepDt * 6.0).clamp(0.0, 1.0));
     pose = VrAvatarPose.walk(
@@ -157,7 +169,20 @@ final class HomePlazaCrowd {
   HomePlazaCrowd._({
     required this.visitors,
     required this.theme,
-  });
+  }) {
+    for (final v in visitors) {
+      peerStage.upsertPeer(
+        VrPeerAvatarSnapshot(
+          peerId: v.id,
+          appearance: v.appearance,
+          x: v.x,
+          z: v.z,
+          yaw: v.yaw,
+          pose: v.pose,
+        ),
+      );
+    }
+  }
 
   factory HomePlazaCrowd.plan({
     required HomeEcosystemLayout layout,
@@ -381,55 +406,63 @@ final class HomePlazaCrowd {
 
   final List<HomePlazaVisitorState> visitors;
   final VrHomeThemeData theme;
-  final Node root = Node(name: 'home_plaza_crowd_root')..raycastable = false;
+  final Node root = Node(name: 'home_plaza_crowd_root')
+    ..raycastable = false
+    ..shadowCastingMode = ShadowCastingMode.off;
 
-  final List<_MountedVisitor> _mounted = [];
-  final List<Node> _aerialOrbs = [];
+  /// Shared instanced stage that batches all NPCs and any live multiplayer
+  /// peer avatars (`upsertPeer` / `removePeer`) into `<= 3` GPU draw calls.
+  final VrPeerAvatarStage peerStage = VrPeerAvatarStage(maxPeers: 48);
+
+  static Geometry? _sharedOrbGeometry;
+  InstancedMesh? _aerialOrbMesh;
+  Node? _aerialOrbNode;
   double _lastTime = -1;
+  double _aiAccum = 1.0;
+  double _orbAccum = 1.0;
   double _lastGreetingAudioTime = -10.0;
   bool _gpuMounted = false;
   bool _disposed = false;
 
   bool get isGpuMounted => _gpuMounted;
 
-  /// Attaches 3D [VrAvatarNode] visitors and ambient atrium orbs to [parent]
-  /// when Flutter GPU (`Scene.isReadyToRender`) is active.
+  /// Attaches the shared [VrPeerAvatarStage] (`3` `InstancedMesh`es total for
+  /// all visitors + remote users) and `1` `InstancedMesh` for the 6 aerial orbs.
   void mountGpu(Node parent) {
     if (_disposed || _gpuMounted || !Scene.isReadyToRender) return;
     _gpuMounted = true;
-    for (final state in visitors) {
-      final avatar = VrAvatarNode(
-        appearance: state.appearance,
-        animateIdle: true,
-        detail: VrAvatarDetail.far,
-      );
-      _disableShadowsAndPicking(avatar.root);
-      final holder = Node(name: state.id)
-        ..raycastable = false
-        ..localTransform = _placementMatrix(state.x, state.z, state.yaw)
-        ..add(avatar.root);
-      root.add(holder);
-      _mounted.add(_MountedVisitor(state: state, holder: holder, avatar: avatar));
-    }
+    peerStage.mountGpu(root);
 
-    // Add 6 gentle luminous micro-orbs gliding through the upper plaza atrium
-    final orbGeometry = SphereGeometry(radius: 0.065, segments: 10, rings: 8);
+    final orbGeometry = _sharedOrbGeometry ??= SphereGeometry(
+      radius: 0.065,
+      segments: 8,
+      rings: 6,
+    );
+    final mat = UnlitMaterial()
+      ..baseColorFactor = vm.Vector4(1, 1, 1, 0.88)
+      ..vertexColorWeight = 0.0;
+    final orbMesh = InstancedMesh(
+      geometry: orbGeometry,
+      material: mat,
+      cullInstances: false,
+    );
     final accent = theme.accent;
     final secondary = theme.secondary;
+    final identity = vm.Matrix4.identity();
     for (var i = 0; i < 6; i++) {
       final c = i.isEven ? accent : secondary;
-      final mat = UnlitMaterial()
-        ..baseColorFactor = vm.Vector4(c.r, c.g, c.b, 0.88)
-        ..vertexColorWeight = 0.0;
-      final orb = Node(
-        name: 'plaza_ambient_orb_$i',
-        mesh: Mesh(orbGeometry, mat),
-      )
-        ..raycastable = false
-        ..shadowCastingMode = ShadowCastingMode.off;
-      root.add(orb);
-      _aerialOrbs.add(orb);
+      orbMesh.addInstance(
+        identity,
+        color: vm.Vector4(c.r, c.g, c.b, 0.88),
+      );
     }
+    final orbNode = Node(name: 'plaza_ambient_orbs_instanced')
+      ..raycastable = false
+      ..shadowCastingMode = ShadowCastingMode.off
+      ..addComponent(InstancedMeshComponent(orbMesh));
+    root.add(orbNode);
+    _aerialOrbMesh = orbMesh;
+    _aerialOrbNode = orbNode;
 
     parent.add(root);
   }
@@ -437,62 +470,65 @@ final class HomePlazaCrowd {
   void tick(
     double time, {
     vm.Vector3? eyePosition,
+    vm.Vector3? viewerForward,
     void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
   }) {
     if (_disposed || !time.isFinite) return;
     final dt = _lastTime < 0 ? (1 / 60) : (time - _lastTime).clamp(0.0, 0.1);
     _lastTime = time;
 
-    for (var i = 0; i < visitors.length; i++) {
-      final v = visitors[i];
-      final wasGreeting = v.greetingPlayer;
-      v.step(time, dt, eyePosition);
-      if (!wasGreeting &&
-          v.greetingPlayer &&
-          onVisitorGreeted != null &&
-          time - _lastGreetingAudioTime >= 4.0) {
-        _lastGreetingAudioTime = time;
-        onVisitorGreeted(vm.Vector3(v.x, 1.5, v.z));
-      }
-      if (!_gpuMounted || i >= _mounted.length) continue;
-      final m = _mounted[i];
-      m.holder.localTransform = _placementMatrix(v.x, v.z, v.yaw);
-
-      if (eyePosition != null) {
-        final dx = eyePosition.x - v.x;
-        final dz = eyePosition.z - v.z;
-        final distSq = dx * dx + dz * dz;
-        final shouldBeNear = m.avatar.detail == VrAvatarDetail.near
-            ? distSq <= 12.5 * 12.5
-            : distSq <= 9.5 * 9.5;
-        final desiredDetail = shouldBeNear
-            ? VrAvatarDetail.near
-            : VrAvatarDetail.far;
-        if (m.avatar.detail != desiredDetail) {
-          m.avatar.setDetail(desiredDetail);
-          _disableShadowsAndPicking(m.avatar.root);
+    // Decouple AI pathing to 12 Hz (matching multiplayer 10–15 Hz peer ticks)
+    // when GPU is mounted; VrPeerAvatarStage dead-reckons smoothly at 60–120 Hz!
+    _aiAccum += dt;
+    final runAiStep = !_gpuMounted || _aiAccum >= (1.0 / 12.0);
+    if (runAiStep) {
+      final aiDt = _gpuMounted ? _aiAccum.clamp(0.0, 0.25) : dt;
+      _aiAccum = 0.0;
+      for (var i = 0; i < visitors.length; i++) {
+        final v = visitors[i];
+        final wasGreeting = v.greetingPlayer;
+        v.step(time, aiDt, eyePosition);
+        if (!wasGreeting &&
+            v.greetingPlayer &&
+            onVisitorGreeted != null &&
+            time - _lastGreetingAudioTime >= 4.0) {
+          _lastGreetingAudioTime = time;
+          onVisitorGreeted(vm.Vector3(v.x, 1.5, v.z));
         }
-        // Cull visitors beyond 34 m so huge malls never waste draw calls
-        final visible = distSq <= 34.0 * 34.0;
-        if (m.holder.visible != visible) {
-          m.holder.visible = visible;
-        }
-      }
-
-      if (m.holder.visible && m.avatar.detail == VrAvatarDetail.near) {
-        m.avatar.setPose(v.pose);
-        m.avatar.tick(dt);
+        peerStage.updatePeerMotion(
+          v.id,
+          x: v.x,
+          z: v.z,
+          yaw: v.yaw,
+          vx: v.vx,
+          vz: v.vz,
+          pose: v.pose,
+        );
       }
     }
 
-    if (_gpuMounted) {
-      for (var i = 0; i < _aerialOrbs.length; i++) {
-        final phase = time * 0.42 + i * (math.pi / 3);
-        final radius = 4.2 + (i % 3) * 1.6;
-        final ox = math.cos(phase) * radius;
-        final oz = 1.5 + math.sin(phase * 0.85) * (radius * 1.15);
-        final oy = 3.15 + math.sin(time * 1.1 + i * 1.3) * 0.32;
-        _aerialOrbs[i].localTransform = vm.Matrix4.translationValues(ox, oy, oz);
+    peerStage.tick(
+      dt,
+      eyePosition: eyePosition,
+      viewerForward: viewerForward,
+    );
+
+    if (_gpuMounted && _aerialOrbMesh != null) {
+      _orbAccum += dt;
+      if (_orbAccum >= (1.0 / 24.0)) {
+        _orbAccum = 0.0;
+        _aerialOrbMesh!.updateInstanceTransforms((transforms) {
+          for (var i = 0; i < transforms.length; i++) {
+            final phase = time * 0.42 + i * (math.pi / 3);
+            final radius = 4.2 + (i % 3) * 1.6;
+            final ox = math.cos(phase) * radius;
+            final oz = 1.5 + math.sin(phase * 0.85) * (radius * 1.15);
+            final oy = 3.15 + math.sin(time * 1.1 + i * 1.3) * 0.32;
+            transforms[i].setIdentity();
+            transforms[i].setTranslationRaw(ox, oy, oz);
+          }
+        }, recomputeWinding: false);
+        _aerialOrbNode?.markTransformDirty();
       }
     }
   }
@@ -500,34 +536,11 @@ final class HomePlazaCrowd {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    for (final m in _mounted) {
-      m.avatar.dispose();
-    }
-    _mounted.clear();
-    _aerialOrbs.clear();
+    peerStage.dispose();
+    _aerialOrbMesh?.clearInstances();
+    _aerialOrbNode?.detach();
+    _aerialOrbMesh = null;
+    _aerialOrbNode = null;
     root.parent?.remove(root);
   }
-
-  static vm.Matrix4 _placementMatrix(double x, double z, double yaw) =>
-      vm.Matrix4.translationValues(x, 0, z)..rotateY(yaw);
-
-  static void _disableShadowsAndPicking(Node node) {
-    node.raycastable = false;
-    node.shadowCastingMode = ShadowCastingMode.off;
-    for (final child in node.children) {
-      _disableShadowsAndPicking(child);
-    }
-  }
-}
-
-final class _MountedVisitor {
-  _MountedVisitor({
-    required this.state,
-    required this.holder,
-    required this.avatar,
-  });
-
-  final HomePlazaVisitorState state;
-  final Node holder;
-  final VrAvatarNode avatar;
 }

@@ -115,6 +115,8 @@ class VrHomeSpatialBindings {
     this.onSuspend,
     this.onSound,
     this.onVisitorGreeted,
+    this.peerSnapshots,
+    this.peerRemovals,
     this.guidance,
     this.statuses,
     this.wrapContent,
@@ -199,6 +201,11 @@ class VrHomeSpatialBindings {
   final void Function(VrHomeSound)? onSound;
   final void Function(vm.Vector3 visitorPosition, StereoHeadRig rig)?
   onVisitorGreeted;
+
+  /// Optional 10–20 Hz remote multiplayer user avatar snapshots rendered inside
+  /// the same shared `VrPeerAvatarStage` instanced batches as plaza NPCs.
+  final Stream<VrPeerAvatarSnapshot>? peerSnapshots;
+  final Stream<String>? peerRemovals;
   final Stream<VrHomeGuidance>? guidance;
   final Stream<String>? statuses;
   final Widget Function(BuildContext, bool active, Widget child)? wrapContent;

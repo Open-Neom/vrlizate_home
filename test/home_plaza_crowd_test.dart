@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math.dart' as vm;
+import 'package:vrlizate_avatar/vrlizate_avatar.dart';
 import 'package:vrlizate_home/vrlizate_home_spatial.dart';
+import 'package:vrlizate_scene/vrlizate_scene.dart';
 
 void main() {
   group('HomePlazaCrowd (living plazas & famous malls)', () {
@@ -45,6 +47,27 @@ void main() {
       final farPlayer = vm.Vector3(target.x + 20.0, 1.6, target.z + 20.0);
       crowd.tick(1.10, eyePosition: farPlayer);
       expect(target.greetingPlayer, isFalse);
+
+      // Remote multiplayer user avatars share the exact same VrPeerAvatarStage!
+      final baseCount = crowd.peerStage.peerCount;
+      expect(
+        crowd.peerStage.upsertPeer(
+          VrPeerAvatarSnapshot(
+            peerId: 'remote_user_42',
+            appearance: VrAvatarAppearance(species: VrAvatarSpecies.fox),
+            x: 1.5,
+            z: 2.0,
+            yaw: 0.4,
+            vx: 1.1,
+            sequence: 1,
+          ),
+        ),
+        isTrue,
+      );
+      expect(crowd.peerStage.peerCount, baseCount + 1);
+      crowd.tick(1.15, eyePosition: vm.Vector3(0, 1.6, 6), viewerForward: vm.Vector3(0, 0, -1));
+      expect(crowd.peerStage.interpolatedPosition('remote_user_42')!.x, greaterThan(1.5));
+      expect(crowd.peerStage.removePeer('remote_user_42'), isTrue);
       crowd.dispose();
     });
   });

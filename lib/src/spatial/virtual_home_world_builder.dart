@@ -7,7 +7,12 @@ import 'package:vrlizate_world/vrlizate_world.dart';
 import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate_scene/vrlizate_scene.dart'
-    show VrLook, VrTextBitmap, VrTextLabel, VrTextRaster;
+    show
+        VrLook,
+        VrPeerAvatarStage,
+        VrTextBitmap,
+        VrTextLabel,
+        VrTextRaster;
 
 import '../theme/vr_home_theme.dart';
 import '../ecosystem/vr_home_ecosystem_room.dart';
@@ -74,6 +79,9 @@ class VirtualHomeWorldBuilder {
   final List<HomeShowcase> _showcases = [];
   HomePlazaCrowd? _crowd;
   VrAvatarAppearance? _avatarAppearance;
+
+  /// Shared zero-GC instanced stage for NPCs and remote multiplayer user avatars.
+  VrPeerAvatarStage? get peerStage => _crowd?.peerStage;
 
   void setAvatarAppearance(VrAvatarAppearance? appearance) {
     _avatarAppearance = appearance;
@@ -1106,12 +1114,14 @@ class VirtualHomeWorldBuilder {
     FloorWaypoint? hoveredWaypoint,
     PortalPedestal? hoveredPedestal,
     vm.Vector3? eyePosition,
+    vm.Vector3? viewerForward,
     void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
   }) {
     if (eyePosition != null) observe(eyePosition);
     _crowd?.tick(
       time,
       eyePosition: eyePosition,
+      viewerForward: viewerForward,
       onVisitorGreeted: onVisitorGreeted,
     );
     if (identical(_hoveredWaypoint, hoveredWaypoint)) return;

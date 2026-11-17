@@ -1060,6 +1060,22 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (guidance != null) {
       _subscriptions.add(guidance.listen(_onItzliGuidance));
     }
+    final peerSnapshots = _bindings.peerSnapshots;
+    if (peerSnapshots != null) {
+      _subscriptions.add(
+        peerSnapshots.listen((snap) {
+          _worldBuilder.peerStage?.upsertPeer(snap);
+        }),
+      );
+    }
+    final peerRemovals = _bindings.peerRemovals;
+    if (peerRemovals != null) {
+      _subscriptions.add(
+        peerRemovals.listen((peerId) {
+          _worldBuilder.peerStage?.removePeer(peerId);
+        }),
+      );
+    }
     final statuses = _bindings.statuses;
     if (statuses != null) {
       _subscriptions.add(
@@ -2000,6 +2016,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _worldBuilder.tick(
       _time,
       eyePosition: _rig.eyeCenter,
+      viewerForward: _rig.forward,
       hoveredWaypoint: _hoveredWaypoint,
       hoveredPedestal: _hoveredPedestal,
       onVisitorGreeted: _bindings.onVisitorGreeted == null
