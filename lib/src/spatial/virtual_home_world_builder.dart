@@ -1106,9 +1106,14 @@ class VirtualHomeWorldBuilder {
     FloorWaypoint? hoveredWaypoint,
     PortalPedestal? hoveredPedestal,
     vm.Vector3? eyePosition,
+    void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
   }) {
     if (eyePosition != null) observe(eyePosition);
-    _crowd?.tick(time, eyePosition: eyePosition);
+    _crowd?.tick(
+      time,
+      eyePosition: eyePosition,
+      onVisitorGreeted: onVisitorGreeted,
+    );
     if (identical(_hoveredWaypoint, hoveredWaypoint)) return;
     _hoveredWaypoint?.material.emissiveFactor.setValues(0, 0, 0, 1);
     _hoveredWaypoint = hoveredWaypoint;

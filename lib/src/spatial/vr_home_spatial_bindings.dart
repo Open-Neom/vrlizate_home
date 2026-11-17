@@ -114,6 +114,7 @@ class VrHomeSpatialBindings {
     this.onGamepadConnectionChanged,
     this.onSuspend,
     this.onSound,
+    this.onVisitorGreeted,
     this.guidance,
     this.statuses,
     this.wrapContent,
@@ -196,6 +197,8 @@ class VrHomeSpatialBindings {
   onGamepadConnectionChanged;
   final VoidCallback? onSuspend;
   final void Function(VrHomeSound)? onSound;
+  final void Function(vm.Vector3 visitorPosition, StereoHeadRig rig)?
+  onVisitorGreeted;
   final Stream<VrHomeGuidance>? guidance;
   final Stream<String>? statuses;
   final Widget Function(BuildContext, bool active, Widget child)? wrapContent;

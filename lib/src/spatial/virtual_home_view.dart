@@ -2002,6 +2002,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       eyePosition: _rig.eyeCenter,
       hoveredWaypoint: _hoveredWaypoint,
       hoveredPedestal: _hoveredPedestal,
+      onVisitorGreeted: _bindings.onVisitorGreeted == null
+          ? null
+          : (pos) => _bindings.onVisitorGreeted!(pos, _rig),
     );
     _itzliPanel?.update(dt);
     _roomPanel?.update(dt);

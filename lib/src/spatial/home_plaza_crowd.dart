@@ -386,6 +386,7 @@ final class HomePlazaCrowd {
   final List<_MountedVisitor> _mounted = [];
   final List<Node> _aerialOrbs = [];
   double _lastTime = -1;
+  double _lastGreetingAudioTime = -10.0;
   bool _gpuMounted = false;
   bool _disposed = false;
 
@@ -433,14 +434,26 @@ final class HomePlazaCrowd {
     parent.add(root);
   }
 
-  void tick(double time, {vm.Vector3? eyePosition}) {
+  void tick(
+    double time, {
+    vm.Vector3? eyePosition,
+    void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
+  }) {
     if (_disposed || !time.isFinite) return;
     final dt = _lastTime < 0 ? (1 / 60) : (time - _lastTime).clamp(0.0, 0.1);
     _lastTime = time;
 
     for (var i = 0; i < visitors.length; i++) {
       final v = visitors[i];
+      final wasGreeting = v.greetingPlayer;
       v.step(time, dt, eyePosition);
+      if (!wasGreeting &&
+          v.greetingPlayer &&
+          onVisitorGreeted != null &&
+          time - _lastGreetingAudioTime >= 4.0) {
+        _lastGreetingAudioTime = time;
+        onVisitorGreeted(vm.Vector3(v.x, 1.5, v.z));
+      }
       if (!_gpuMounted || i >= _mounted.length) continue;
       final m = _mounted[i];
       m.holder.localTransform = _placementMatrix(v.x, v.z, v.yaw);
