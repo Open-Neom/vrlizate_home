@@ -47,6 +47,8 @@ final class HomePlazaVisitorState {
 
   String ambientComment;
   bool talkingToPlayer = false;
+  double socialReactionRemaining = 0.0;
+  double? socialReactionTargetYaw;
 
   double x;
   double z;
@@ -58,10 +60,41 @@ final class HomePlazaVisitorState {
   bool greetingPlayer = false;
   VrAvatarPose pose = VrAvatarPose.neutral;
 
+  /// Triggers a lively brief social reaction (turning toward an active portal
+  /// launch or newly arrived remote user with a welcoming wave and optional
+  /// updated ambient remark) without any GPU allocation.
+  void triggerSocialReaction(
+    double targetYaw, {
+    double durationSeconds = 3.2,
+    String? comment,
+  }) {
+    if (!targetYaw.isFinite) return;
+    socialReactionTargetYaw = targetYaw;
+    socialReactionRemaining = durationSeconds.clamp(0.5, 8.0);
+    if (comment != null && comment.trim().isNotEmpty) {
+      ambientComment = comment.trim();
+    }
+  }
+
   void step(double time, double dt, vm.Vector3? playerEye) {
     final stepDt = dt.isFinite ? dt.clamp(0.0, 0.25) : 0.0;
     final blinkWave = math.sin(time * 0.9 + phaseOffset * 3.1);
     final blink = blinkWave > 0.985 ? ((blinkWave - 0.985) / 0.015) : 0.0;
+
+    if (socialReactionRemaining > 0.0 && !talkingToPlayer) {
+      socialReactionRemaining = math.max(0.0, socialReactionRemaining - stepDt);
+      vx = 0.0;
+      vz = 0.0;
+      final desiredYaw = socialReactionTargetYaw ?? yaw;
+      yaw = _lerpAngle(yaw, desiredYaw, (stepDt * 5.8).clamp(0.0, 1.0));
+      pose = VrAvatarPose.wave(
+        time + phaseOffset,
+        leftHand: phaseOffset.toInt().isEven,
+        waveAmount: 0.78,
+        blink: blink,
+      );
+      return;
+    }
 
     // Active conversation lock: hold position, face the player smoothly, and
     // animate warm conversational gestures until the dialogue panel closes.
@@ -586,6 +619,39 @@ final class HomePlazaCrowd {
         : '${String.fromCharCodes(runes.take(149))}…';
   }
 
+  /// Number of biome-aware atmospheric floating particles packed into the
+  /// single shared ambient `InstancedMesh` draw call (`0` extra draw calls).
+  static const int ambientParticleCount = 18;
+
+  /// Alerts nearby plaza visitors (`<= radiusMeters`) to turn and wave toward
+  /// a live plaza event (such as opening a room portal or a multiplayer peer
+  /// arriving), returning how many visitors reacted.
+  int reactToEvent(
+    vm.Vector3 focusPoint, {
+    String? reactionComment,
+    double radiusMeters = 7.5,
+  }) {
+    if (_disposed || !radiusMeters.isFinite || radiusMeters <= 0) return 0;
+    final maxDistSq = radiusMeters * radiusMeters;
+    var reacted = 0;
+    for (final v in visitors) {
+      if (v.talkingToPlayer) continue;
+      final dx = focusPoint.x - v.x;
+      final dz = focusPoint.z - v.z;
+      final distSq = dx * dx + dz * dz;
+      if (distSq > maxDistSq || distSq < 0.04) continue;
+      final yaw = math.atan2(dx, dz);
+      v.triggerSocialReaction(
+        yaw,
+        comment: reacted == 0 ? reactionComment : null,
+      );
+      reacted++;
+      if (reacted >= 4) break;
+    }
+    if (reacted > 0) _aiAccum = 1.0;
+    return reacted;
+  }
+
   /// Pure-CPU cone & distance query (`< 0.002 ms`, `0` allocations) returning
   /// the single nearby visitor best aligned with the player's view or ray.
   HomePlazaVisitorState? findFocusedVisitor(
@@ -674,7 +740,8 @@ final class HomePlazaCrowd {
   }
 
   /// Attaches the shared [VrPeerAvatarStage] (`3` `InstancedMesh`es total for
-  /// all visitors + remote users) and `1` `InstancedMesh` for the 6 aerial orbs.
+  /// all visitors + remote users) and `1` `InstancedMesh` for `18` biome-aware
+  /// atmospheric particles (fireflies / neon motes / stardust — zero extra draw calls).
   void mountGpu(Node parent) {
     if (_disposed || _gpuMounted || !Scene.isReadyToRender) return;
     _gpuMounted = true;
@@ -682,12 +749,12 @@ final class HomePlazaCrowd {
     peerStage.mountGpu(root);
 
     final orbGeometry = _sharedOrbGeometry ??= SphereGeometry(
-      radius: 0.065,
+      radius: 0.045,
       segments: 8,
       rings: 6,
     );
     final mat = UnlitMaterial()
-      ..baseColorFactor = vm.Vector4(1, 1, 1, 0.88)
+      ..baseColorFactor = vm.Vector4(1, 1, 1, 0.84)
       ..vertexColorWeight = 0.0;
     final orbMesh = InstancedMesh(
       geometry: orbGeometry,
@@ -697,11 +764,12 @@ final class HomePlazaCrowd {
     final accent = theme.accent;
     final secondary = theme.secondary;
     final identity = vm.Matrix4.identity();
-    for (var i = 0; i < 6; i++) {
-      final c = i.isEven ? accent : secondary;
+    for (var i = 0; i < ambientParticleCount; i++) {
+      final isOrb = i < 6;
+      final c = i % 3 == 0 ? accent : (i % 3 == 1 ? secondary : const Color(0xFFF8FAFC));
       orbMesh.addInstance(
         identity,
-        color: vm.Vector4(c.r, c.g, c.b, 0.88),
+        color: vm.Vector4(c.r, c.g, c.b, isOrb ? 0.88 : 0.62),
       );
     }
     final orbNode = Node(name: 'plaza_ambient_orbs_instanced')
@@ -858,15 +926,32 @@ final class HomePlazaCrowd {
       _orbAccum += dt;
       if (_orbAccum >= (1.0 / 24.0)) {
         _orbAccum = 0.0;
+        final warmBiome = theme.accent.r > theme.accent.b;
         _aerialOrbMesh!.updateInstanceTransforms((transforms) {
           for (var i = 0; i < transforms.length; i++) {
-            final phase = time * 0.42 + i * (math.pi / 3);
-            final radius = 4.2 + (i % 3) * 1.6;
-            final ox = math.cos(phase) * radius;
-            final oz = 1.5 + math.sin(phase * 0.85) * (radius * 1.15);
-            final oy = 3.15 + math.sin(time * 1.1 + i * 1.3) * 0.32;
             transforms[i].setIdentity();
-            transforms[i].setTranslationRaw(ox, oy, oz);
+            if (i < 6) {
+              // 6 primary sculptural atrium orbs
+              final phase = time * 0.42 + i * (math.pi / 3);
+              final radius = 4.2 + (i % 3) * 1.6;
+              final ox = math.cos(phase) * radius;
+              final oz = 1.5 + math.sin(phase * 0.85) * (radius * 1.15);
+              final oy = 3.15 + math.sin(time * 1.1 + i * 1.3) * 0.32;
+              transforms[i].scaleByDouble(1.4, 1.4, 1.4, 1.0);
+              transforms[i].setTranslationRaw(ox, oy, oz);
+            } else {
+              // 12 biome-aware floating atmospheric motes (fireflies / neon / stardust)
+              final m = i - 6;
+              final orbit = time * (warmBiome ? 0.22 : 0.34) + m * 0.54;
+              final radius = 2.6 + (m % 4) * 2.15;
+              final ox = math.cos(orbit) * radius + math.sin(time * 0.7 + m) * 0.35;
+              final oz = -1.0 + math.sin(orbit * 0.82) * (radius * 1.1);
+              final rise = ((time * (warmBiome ? 0.28 : 0.42) + m * 0.37) % 1.0);
+              final oy = 1.05 + rise * 3.45 + math.sin(time * 1.9 + m) * 0.14;
+              final s = 0.42 + 0.35 * math.sin(rise * math.pi);
+              transforms[i].scaleByDouble(s, s, s, 1.0);
+              transforms[i].setTranslationRaw(ox, oy, oz);
+            }
           }
         }, recomputeWinding: false);
         _aerialOrbNode?.markTransformDirty();

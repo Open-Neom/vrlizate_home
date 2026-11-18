@@ -189,6 +189,44 @@ void main() {
 
       speakingPanel.actions.last.onPressed();
       expect(closed, 1);
+
+      final writePanel = await createVrHomeNpcDialoguePanel(
+        npc: npc,
+        pose: pose,
+        text: 'Pregunta lo que quieras con WordSphere.',
+        busy: false,
+        listening: false,
+        speakingTts: false,
+        enableWriteAction: true,
+        onAction: actionsTriggered.add,
+        onClose: () => closed++,
+        meshBuilder: () => Mesh.primitives(primitives: const []),
+        textNodeBuilder: (spec) async => Node(name: spec.nodeName),
+      );
+      final writeAction = writePanel.actions.firstWhere((a) => a.id == 'npc:write');
+      expect(writeAction.label, 'Escribir (WordSphere)');
+      writeAction.onPressed();
+      expect(actionsTriggered, contains('write'));
+    });
+
+    test('reactToEvent turns nearby visitors with social reaction & 18 ambient particles', () {
+      expect(HomePlazaCrowd.ambientParticleCount, 18);
+      final layout = HomeEcosystemLayout(
+        VrHomeEcosystemRoom.defaults,
+        topology: HomePlazaTopology.distributedCruciform,
+      );
+      final crowd = HomePlazaCrowd.plan(layout: layout);
+      final first = crowd.visitors.first;
+      final reacted = crowd.reactToEvent(
+        vm.Vector3(first.x + 2.0, 1.5, first.z + 2.0),
+        reactionComment: '¡Qué gran sala acabas de abrir!',
+        radiusMeters: 6.0,
+      );
+      expect(reacted, greaterThanOrEqualTo(1));
+      expect(first.socialReactionRemaining, greaterThan(0.0));
+      crowd.tick(0.2, eyePosition: vm.Vector3(100, 1.6, 100));
+      expect(first.pose.leftArmFlexion + first.pose.rightArmFlexion, greaterThan(0.1));
+      crowd.dispose();
     });
   });
 }

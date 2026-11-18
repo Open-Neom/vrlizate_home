@@ -160,6 +160,7 @@ class VrHomeSpatialBindings {
     this.npcListening,
     this.npcSpeakingTts,
     this.npcSubtitle,
+    this.npcWriteEnabled = false,
     this.npcLatestBark,
     this.initialQuality = VrQualityPreset.medium,
     this.calibrationExperienceId,
@@ -281,6 +282,7 @@ class VrHomeSpatialBindings {
   final bool Function()? npcListening;
   final bool Function()? npcSpeakingTts;
   final String Function()? npcSubtitle;
+  final bool npcWriteEnabled;
   final String? Function(String visitorId)? npcLatestBark;
   final VrQualityPreset initialQuality;
   final String? calibrationExperienceId;

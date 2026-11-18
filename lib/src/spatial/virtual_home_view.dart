@@ -315,6 +315,7 @@ Future<VrWorldActionPanel3D> createVrHomeNpcDialoguePanel({
   required void Function(String actionId) onAction,
   required VoidCallback onClose,
   String? subtitleOverride,
+  bool enableWriteAction = false,
   VrHomeThemeData theme = VrHomeThemeData.aurora,
   VrControlMeshBuilder? meshBuilder,
   VrWorldTextNodeBuilder? textNodeBuilder,
@@ -349,6 +350,13 @@ Future<VrWorldActionPanel3D> createVrHomeNpcDialoguePanel({
       enabled: !busy || listening,
       onPressed: () => onAction('listen'),
     ),
+    if (enableWriteAction)
+      VrWorldAction(
+        id: 'npc:write',
+        label: 'Escribir (WordSphere)',
+        enabled: !busy && !listening,
+        onPressed: () => onAction('write'),
+      ),
     VrWorldAction(
       id: 'npc:tts',
       label: speakingTts ? 'Callar voz (TTS)' : 'Leer en voz (TTS)',
@@ -1231,9 +1239,16 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     }
     final peerSnapshots = _bindings.peerSnapshots;
     if (peerSnapshots != null) {
+      final seenPeers = <String>{};
       _subscriptions.add(
         peerSnapshots.listen((snap) {
           _worldBuilder.peerStage?.upsertPeer(snap);
+          if (seenPeers.add(snap.peerId)) {
+            _worldBuilder.reactCrowdToEvent(
+              vm.Vector3(snap.x, 1.5, snap.z),
+              reactionComment: '¡Bienvenido a la plaza! Qué gusto ver más exploradores aquí.',
+            );
+          }
         }),
       );
     }
@@ -3463,6 +3478,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         listening: listening,
         speakingTts: speakingTts,
         subtitleOverride: subtitleOverride,
+        enableWriteAction: _bindings.npcWriteEnabled,
         theme: widget.theme,
         onAction: (action) => unawaited(_performNpcAction(action)),
         onClose: _dismissNpcPanel,

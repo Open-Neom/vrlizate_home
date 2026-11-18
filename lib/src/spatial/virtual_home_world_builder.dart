@@ -101,6 +101,18 @@ class VirtualHomeWorldBuilder {
   void setVisitorComment(String visitorId, String comment) =>
       _crowd?.setVisitorComment(visitorId, comment);
 
+  int reactCrowdToEvent(
+    vm.Vector3 focusPoint, {
+    String? reactionComment,
+    double radiusMeters = 7.5,
+  }) =>
+      _crowd?.reactToEvent(
+        focusPoint,
+        reactionComment: reactionComment,
+        radiusMeters: radiusMeters,
+      ) ??
+      0;
+
   void setAvatarAppearance(VrAvatarAppearance? appearance) {
     _avatarAppearance = appearance;
     for (final showcase in _showcases) {
