@@ -765,7 +765,7 @@ final class HomePlazaCrowd {
     final epoch = _mountEpoch;
     final header = '${focused.displayName} · ${focused.role}';
     final comment = focused.ambientComment;
-    final hint = canTalkToVisitors ? '[ A · Hablar con Itzli ]' : null;
+    final hint = canTalkToVisitors ? '[ A · Hablar (IA Local) ]' : null;
     rasterizeBarkBubble(
       header,
       comment,

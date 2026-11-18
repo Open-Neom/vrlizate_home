@@ -115,7 +115,7 @@ void main() {
       final bitmap = await HomePlazaCrowd.rasterizeBarkBubble(
         '${npc.displayName} · ${npc.role}',
         npc.ambientComment,
-        actionHint: '[ A · Hablar con Itzli ]',
+        actionHint: '[ A · Hablar (IA Local) ]',
       );
       expect(bitmap.width, greaterThan(80));
       expect(bitmap.height, greaterThan(40));
@@ -123,7 +123,7 @@ void main() {
       crowd.dispose();
     });
 
-    test('createVrHomeNpcDialoguePanel exposes Itzli text + explicit TTS toggle', () async {
+    test('createVrHomeNpcDialoguePanel exposes embedded SAIA text + explicit TTS toggle', () async {
       final actionsTriggered = <String>[];
       var closed = 0;
       final npc = VrHomeNpcDescriptor(
@@ -143,10 +143,11 @@ void main() {
       final idlePanel = await createVrHomeNpcDialoguePanel(
         npc: npc,
         pose: pose,
-        text: 'Itzli recomienda visitar la sala de Cine Gratis 24/7.',
+        text: 'SAIA recomienda visitar la sala de Cine Gratis 24/7.',
         busy: false,
         listening: false,
         speakingTts: false,
+        subtitleOverride: '3D · IA EN ESTACIÓN FARO · TTS OPCIONAL',
         onAction: actionsTriggered.add,
         onClose: () => closed++,
         meshBuilder: () => Mesh.primitives(primitives: const []),
