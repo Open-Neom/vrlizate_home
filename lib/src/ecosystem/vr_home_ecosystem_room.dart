@@ -162,6 +162,19 @@ class VrHomeEcosystemRoom {
     terminalActionLabel: 'A · Entrar a TV & Cine Gratis',
   );
 
+  /// Opt-in flagship commercial storefront inside the main Grand Plaza showing
+  /// visitors how rentable spaces host interactive HTTPS VR domains & `.vrlz` apps.
+  static const rentableDomainShowcase = VrHomeEcosystemRoom.forLease(
+    id: 'rentable_domain_vr',
+    boothCode: 'VR-01',
+    title: 'Local EN RENTA · Tu Dominio VR',
+    description:
+        'Visualiza tu propio dominio web (.com) de forma interactiva en VR o monta tu experiencia .vrlz aquí.',
+    accent: 0xFFF59E0B,
+    doorBadge: '★ EN RENTA · TU DOMINIO .COM EN VR',
+    terminalActionLabel: 'A · Probar tu dominio web aquí',
+  );
+
   static const defaults = <VrHomeEcosystemRoom>[
     VrHomeEcosystemRoom(
       id: 'profile',

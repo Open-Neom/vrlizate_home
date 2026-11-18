@@ -45,4 +45,19 @@ void main() {
       },
     );
   }
+
+  test('for-lease domain showcase signs paint high-contrast amber-gold borders', () async {
+    expect(VrHomeEcosystemRoom.rentableDomainShowcase.isForLease, isTrue);
+    final bitmap = await VirtualHomeWorldBuilder.rasterizeRoomSign(
+      '★ EN RENTA · VR-01 ★\nTU DOMINIO .COM EN VR',
+      maxLines: 2,
+      maxWidthPx: 1400,
+      forLeaseStyle: true,
+    );
+    // Top-left border pixel matches amber-gold (0xFFF59E0B -> 245, 158, 11, 255).
+    expect(bitmap.pixels.take(4), [245, 158, 11, 255]);
+    // Interior backing pixel matches deep obsidian navy (0xFF0E1726 -> 14, 23, 38, 255).
+    final innerIndex = (12 * bitmap.width + 12) * 4;
+    expect(bitmap.pixels.sublist(innerIndex, innerIndex + 4), [14, 23, 38, 255]);
+  });
 }

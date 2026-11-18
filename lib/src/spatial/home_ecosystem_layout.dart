@@ -1092,6 +1092,34 @@ class HomeEcosystemLayout {
         0xFFF59E0B,
         HomeLobbyShape.beveledBox,
       );
+      // Walkable luminous gold-accent entry carpet guiding visitors into the
+      // rentable domain showroom (height 0.014 -> zero collision obstruction).
+      part(
+        'for_lease_carpet',
+        4.6,
+        .007,
+        0,
+        4.6,
+        .014,
+        2.4,
+        HomeLobbyFinish.trim,
+        0xFFD97706,
+      );
+      // Luminous commercial gold/emerald vertical accent bands framing the
+      // storefront doorway outside the clear passage width.
+      for (final side in const [-1.0, 1.0]) {
+        part(
+          'for_lease_door_stripe_$side',
+          2.14,
+          1.72,
+          side * (actualDoorHalfWidth + .18),
+          .08,
+          2.96,
+          .14,
+          HomeLobbyFinish.trim,
+          0xFFF59E0B,
+        );
+      }
       return portal;
     }
 

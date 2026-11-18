@@ -808,19 +808,26 @@ class VirtualHomeWorldBuilder {
       }
       for (final portal in ecosystemLayout.portals) {
         final identity = HomeRoomIdentity.forPurpose(portal.room.purpose);
-        final doorSubtitle = portal.room.doorBadge ?? identity.category;
+        final isForLease = portal.room.isForLease;
+        final doorSubtitle =
+            portal.room.doorBadge ??
+            (isForLease
+                ? '★ EN RENTA · TU DOMINIO .COM EN VR'
+                : identity.category);
         final terminalAction =
-            portal.room.terminalActionLabel ?? 'A · Explorar en VR';
+            portal.room.terminalActionLabel ??
+            (isForLease ? 'A · Visualizar tu dominio en VR' : 'A · Explorar en VR');
         for (final atDoor in const [true, false]) {
           final label = await _createRoomSign(
             atDoor
                 ? '${portal.room.title}\n$doorSubtitle'
                 : '${portal.room.title}\n$terminalAction',
-            height: atDoor ? .50 : .58,
-            maxWorldWidth: atDoor ? 3.12 : 2.04,
+            height: atDoor ? .54 : .58,
+            maxWorldWidth: atDoor ? 3.24 : 2.14,
             maxLines: 2,
             maxWidthPx: 1700,
             name: 'ecosystem_${portal.room.id}_${atDoor ? 'sign' : 'action'}',
+            forLeaseStyle: isForLease,
           );
           if (generation != _generation) return;
           label.node.localTransform =
@@ -840,6 +847,39 @@ class VirtualHomeWorldBuilder {
             label.node.raycastable = false;
           }
         }
+        // For-lease storefronts also mount a crisp commercial vitrine sign right
+        // beside the doorway so passersby immediately recognize rentable VR
+        // domain spaces from the promenade.
+        if (isForLease) {
+          final codeLabel = portal.room.boothCode != null
+              ? ' · ${portal.room.boothCode}'
+              : '';
+          final windowSign = await _createRoomSign(
+            '★ EN RENTA$codeLabel ★\nTU DOMINIO .COM EN VR\nA · Probar tu web o .vrlz aquí',
+            height: .68,
+            maxWorldWidth: 1.48,
+            maxLines: 3,
+            maxWidthPx: 1100,
+            name: 'ecosystem_${portal.room.id}_window_lease_sign',
+            forLeaseStyle: true,
+          );
+          if (generation != _generation) return;
+          final offset = portal.displayOffset;
+          final wx = portal.isNorthSouth
+              ? portal.signX + offset
+              : portal.signX;
+          final wz = portal.isNorthSouth
+              ? portal.signZ
+              : portal.signZ + offset;
+          windowSign.node.localTransform =
+              vm.Matrix4.translationValues(wx, 1.56, wz)
+                ..rotateY(portal.yaw)
+                ..translateByVector3(vm.Vector3(0, 0, .28))
+                ..rotateX(math.pi / 2)
+                ..scaleByVector3(vm.Vector3(-1, 1, 1));
+          root.add(windowSign.node);
+          _rooms[windowSign.node] = portal.room;
+        }
         // Public room proposal stays on its wall in both eyes. It is not a
         // claim that a remote catalog/account has already been connected.
         final proposal = await _createRoomSign(
@@ -849,6 +889,7 @@ class VirtualHomeWorldBuilder {
           maxLines: 3,
           maxWidthPx: 1500,
           name: 'ecosystem_${portal.room.id}_proposal',
+          forLeaseStyle: isForLease,
         );
         if (generation != _generation) return;
         proposal.node
@@ -917,6 +958,12 @@ class VirtualHomeWorldBuilder {
     }
   }
 
+  /// High-contrast amber-gold & obsidian commercial sign palette for rentable
+  /// `"EN RENTA"` VR domain storefronts so visitors recognize them immediately.
+  static const Color forLeaseSignBackground = Color(0xFF0E1726);
+  static const Color forLeaseSignForeground = Color(0xFFFEF3C7);
+  static const Color forLeaseSignBorder = Color(0xFFF59E0B);
+
   /// The backing is composited into the existing text texture. No extra mesh,
   /// light-sensitive material or invisible picking surface is introduced.
   /// This CPU raster stage can be tested without a Flutter GPU context.
@@ -925,10 +972,13 @@ class VirtualHomeWorldBuilder {
     String text, {
     int maxLines = 2,
     double maxWidthPx = 1700,
+    bool forLeaseStyle = false,
   }) async {
+    final fg = forLeaseStyle ? forLeaseSignForeground : roomSignForeground;
+    final bg = forLeaseStyle ? forLeaseSignBackground : roomSignBackground;
     final bitmap = await VrTextRaster.rasterize(
       text,
-      color: roomSignForeground,
+      color: fg,
       fontWeight: FontWeight.w800,
       fontSize: 96,
       paddingPx: 24,
@@ -936,20 +986,43 @@ class VirtualHomeWorldBuilder {
       maxWidthPx: maxWidthPx,
     );
     final pixels = Uint8List.fromList(bitmap.pixels);
-    final argb = roomSignBackground.toARGB32();
+    final argb = bg.toARGB32();
     final background = [(argb >> 16) & 255, (argb >> 8) & 255, argb & 255];
-    for (var i = 0; i < pixels.length; i += 4) {
-      final alpha = pixels[i + 3];
-      for (var channel = 0; channel < 3; channel++) {
-        pixels[i + channel] =
-            (pixels[i + channel] * alpha +
-                background[channel] * (255 - alpha) +
-                127) ~/
-            255;
+    final borderArgb = forLeaseSignBorder.toARGB32();
+    final border = [
+      (borderArgb >> 16) & 255,
+      (borderArgb >> 8) & 255,
+      borderArgb & 255,
+    ];
+    final width = bitmap.width;
+    final height = bitmap.height;
+    const stripeThickness = 10;
+    for (var y = 0; y < height; y++) {
+      final isBorderRow =
+          forLeaseStyle && (y < stripeThickness || y >= height - stripeThickness);
+      for (var x = 0; x < width; x++) {
+        final i = (y * width + x) * 4;
+        final isBorderCol =
+            forLeaseStyle && (x < stripeThickness || x >= width - stripeThickness);
+        if (isBorderRow || isBorderCol) {
+          pixels[i] = border[0];
+          pixels[i + 1] = border[1];
+          pixels[i + 2] = border[2];
+          pixels[i + 3] = 255;
+          continue;
+        }
+        final alpha = pixels[i + 3];
+        for (var channel = 0; channel < 3; channel++) {
+          pixels[i + channel] =
+              (pixels[i + channel] * alpha +
+                  background[channel] * (255 - alpha) +
+                  127) ~/
+              255;
+        }
+        pixels[i + 3] = 255;
       }
-      pixels[i + 3] = 255;
     }
-    return VrTextBitmap(pixels, bitmap.width, bitmap.height);
+    return VrTextBitmap(pixels, width, height);
   }
 
   Future<VrTextLabel> _createRoomSign(
@@ -959,11 +1032,13 @@ class VirtualHomeWorldBuilder {
     required String name,
     int maxLines = 2,
     double maxWidthPx = 1700,
+    bool forLeaseStyle = false,
   }) async {
     final bitmap = await rasterizeRoomSign(
       text,
       maxLines: maxLines,
       maxWidthPx: maxWidthPx,
+      forLeaseStyle: forLeaseStyle,
     );
     final label = VrTextLabel.fromBitmap(
       bitmap,
