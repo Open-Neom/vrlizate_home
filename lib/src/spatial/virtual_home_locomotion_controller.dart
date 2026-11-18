@@ -36,8 +36,21 @@ void applyHomeLookRotation(StereoHeadRig rig, double x, double y, double dt) {
   rig.bodyPitch = (rig.bodyPitch + rotation.pitch).clamp(-1.45, 1.45);
 }
 
-/// Manages parabolic arc jump and smooth analog thumbstick locomotion in the 3D Virtual Home.
+/// Manages parabolic arc jump, vertical hop/jump physics, turbo sprint with
+/// natural running cadence, and smooth analog thumbstick locomotion in the 3D Virtual Home.
 class VirtualHomeLocomotionController {
+  /// Default seated/standing VR eye height in meters.
+  static const double baseEyeHeight = 1.60;
+
+  /// Vertical launch speed (m/s) for a comfortable, responsive VR jump (~0.80 m apex).
+  static const double hopInitialVelocity = 4.65;
+
+  /// Downward gravitational acceleration (m/s²) during a vertical jump.
+  static const double hopGravity = 13.5;
+
+  /// Sustained seconds holding TURBO while moving before full running gait engages.
+  static const double turboRunEngageSeconds = 0.55;
+
   ArcJumpAnim? _currentJump;
   bool _awaitingNeutral = false;
   double _travelSeconds = 0;
@@ -46,6 +59,15 @@ class VirtualHomeLocomotionController {
   double _voiceStickX = 0;
   double _voiceStickY = 0;
   double _voiceTurnRate = 0;
+  double _hopOffsetY = 0;
+  double _hopVelocityY = 0;
+  bool _hopAirborne = false;
+  bool _turboActive = false;
+  double _turboHoldSeconds = 0;
+  double _sustainedFastSeconds = 0;
+  double _runBlend = 0;
+  double _gaitPhase = 0;
+  double _lastGaitSin = 0;
   final vm.Vector3 _lastMoveDirection = vm.Vector3.zero();
   final VrStickEdgeTurn _edgeTurn = VrStickEdgeTurn();
 
@@ -56,10 +78,122 @@ class VirtualHomeLocomotionController {
   /// True while a timed spoken locomotion command is driving the rig.
   bool get isVoiceMoving => _voiceRemainingSec > 0;
 
+  /// True while the player is airborne from a manual vertical jump (`SALTAR`).
+  bool get isHopping => _hopAirborne || _hopOffsetY > 1e-4;
+
+  /// Current vertical height offset above [baseEyeHeight] from a manual jump.
+  double get hopOffsetY => _hopOffsetY;
+
+  /// True while the `TURBO` boost button is engaged during movement.
+  bool get isTurboActive => _turboActive;
+
+  /// True once sustained turbo or full-speed movement enters simulated running gait.
+  bool get isRunning => _runBlend >= 0.45 && _currentWalkSpeed >= 2.2;
+
+  /// Normalized running intensity (`0.0` walking/idle -> `1.0` full turbo sprint).
+  double get runIntensity => _runBlend;
+
   void _resetTravelSpeed() {
     _travelSeconds = 0;
     _currentWalkSpeed = 0;
+    _turboActive = false;
+    _turboHoldSeconds = 0;
+    _sustainedFastSeconds = 0;
     _lastMoveDirection.setZero();
+  }
+
+  /// Launches a manual vertical jump (`SALTAR`) while preserving horizontal
+  /// walking or running momentum. Returns `true` if a jump started.
+  bool triggerHop() {
+    if (_hopAirborne || isJumping) return false;
+    _hopAirborne = true;
+    _hopVelocityY = hopInitialVelocity;
+    HapticFeedback.lightImpact();
+    return true;
+  }
+
+  /// Advances vertical jump physics and natural running stride cadence for [dt].
+  ///
+  /// Returns:
+  /// - `eyeY`: target camera eye height in meters (`baseEyeHeight + hop + gait bob`).
+  /// - `landed`: `true` on the frame the player touches down from a jump.
+  /// - `footstepPulse`: `true` on rhythmic foot-strikes while running.
+  ({double eyeY, bool landed, bool footstepPulse}) stepVerticalAndGait(
+    double dt,
+  ) {
+    if (!dt.isFinite || dt <= 0) {
+      return (
+        eyeY: baseEyeHeight + _hopOffsetY,
+        landed: false,
+        footstepPulse: false,
+      );
+    }
+    final step = min(dt, 0.1);
+    var landed = false;
+    if (_hopAirborne || _hopOffsetY > 0) {
+      _hopOffsetY += _hopVelocityY * step;
+      _hopVelocityY -= hopGravity * step;
+      if (_hopOffsetY <= 0) {
+        _hopOffsetY = 0;
+        _hopVelocityY = 0;
+        if (_hopAirborne) {
+          _hopAirborne = false;
+          landed = true;
+          HapticFeedback.selectionClick();
+        }
+      }
+    }
+
+    final movingFast = _currentWalkSpeed >= 2.2;
+    if (_turboActive && movingFast) {
+      _turboHoldSeconds += step;
+    } else {
+      _turboHoldSeconds = max(0.0, _turboHoldSeconds - step * 2.5);
+    }
+    if (_currentWalkSpeed >= 4.2 && !_turboActive) {
+      _sustainedFastSeconds += step;
+    } else {
+      _sustainedFastSeconds = max(0.0, _sustainedFastSeconds - step * 2.5);
+    }
+
+    double targetBlend = 0.0;
+    if (!_hopAirborne && movingFast) {
+      if (_turboActive && _turboHoldSeconds >= turboRunEngageSeconds) {
+        targetBlend = ((_turboHoldSeconds - turboRunEngageSeconds) / 0.45)
+            .clamp(0.35, 1.0);
+      } else if (_sustainedFastSeconds >= 1.4) {
+        targetBlend = ((_sustainedFastSeconds - 1.4) / 0.8).clamp(0.0, 0.45);
+      }
+    }
+    final blendRate = targetBlend > _runBlend ? 6.0 : 10.0;
+    _runBlend += (targetBlend - _runBlend) * min(1.0, step * blendRate);
+    if (_runBlend < 0.005) _runBlend = 0.0;
+
+    var bobY = 0.0;
+    var footstepPulse = false;
+    if (_runBlend > 0.01 && !_hopAirborne) {
+      // ~2.35 strides/sec (4.7 steps/sec) at full sprint; subtle VR-safe ±3.2 cm bounce.
+      final strideHz = 1.65 + 0.75 * _runBlend;
+      _gaitPhase += step * strideHz * 2.0 * pi;
+      if (_gaitPhase > 1e6) _gaitPhase %= (2.0 * pi);
+      final curSin = sin(_gaitPhase);
+      if ((_lastGaitSin <= 0 && curSin > 0) ||
+          (_lastGaitSin >= 0 && curSin < 0)) {
+        if (_runBlend >= 0.40) {
+          footstepPulse = true;
+        }
+      }
+      _lastGaitSin = curSin;
+      bobY = curSin.abs() * 0.032 * _runBlend;
+    } else {
+      _lastGaitSin = 0;
+    }
+
+    return (
+      eyeY: baseEyeHeight + _hopOffsetY + bobY,
+      landed: landed,
+      footstepPulse: footstepPulse,
+    );
   }
 
   /// Starts explicit voice-driven walking, strafing, or turning without waiting
@@ -133,6 +267,11 @@ class VirtualHomeLocomotionController {
   /// A route change or explicit Home action cancels any pending destination.
   void cancelJump() {
     _currentJump = null;
+    _hopAirborne = false;
+    _hopOffsetY = 0;
+    _hopVelocityY = 0;
+    _runBlend = 0;
+    _lastGaitSin = 0;
     stopVoiceMotion();
     suspendSmoothLocomotion();
   }
@@ -212,6 +351,7 @@ class VirtualHomeLocomotionController {
     bool? atEdge,
     bool edgeTurnEnabled = true,
     bool manualLook = false,
+    bool turbo = false,
     double speed = 2.4,
     double? maxSpeed,
     double accelerationSeconds = 2.4,
@@ -249,6 +389,7 @@ class VirtualHomeLocomotionController {
       stickX: input.movementX,
       stickY: input.movementY,
       dt: dt,
+      turbo: turbo,
       speed: speed,
       maxSpeed: maxSpeed,
       accelerationSeconds: accelerationSeconds,
@@ -309,6 +450,7 @@ class VirtualHomeLocomotionController {
     required double stickX,
     required double stickY,
     required double dt,
+    bool turbo = false,
     double speed = 2.4,
     double? maxSpeed,
     double accelerationSeconds = 2.4,
@@ -355,27 +497,44 @@ class VirtualHomeLocomotionController {
     }
     _lastMoveDirection.setFrom(direction);
 
+    final effectiveBaseSpeed = turbo ? speed * 1.35 : speed;
+    final effectiveTopSpeed = turbo
+        ? max(topSpeed * 1.42, 6.8)
+        : topSpeed;
+    final effectiveAccelSec = turbo
+        ? max(0.35, accelerationSeconds * 0.45)
+        : accelerationSeconds;
+    _turboActive = turbo && magnitude >= 0.45;
+
     // Preserve the fixed-speed API; progressive/collision travel bounds stalled
     // frames to 100 ms, so a resumed frame cannot advance the whole ramp.
-    final step = maxSpeed != null || walkSpace != null ? min(dt, 0.1) : dt;
+    final step = maxSpeed != null || walkSpace != null || turbo
+        ? min(dt, 0.1)
+        : dt;
     double distance;
-    if (topSpeed > speed && magnitude >= 0.7) {
-      final previous = _travelSeconds;
-      _travelSeconds = min(previous + step, accelerationSeconds);
+    final rampThreshold = turbo ? 0.45 : 0.7;
+    if (effectiveTopSpeed > effectiveBaseSpeed && magnitude >= rampThreshold) {
+      final previous = min(_travelSeconds, effectiveAccelSec);
+      _travelSeconds = min(previous + step, effectiveAccelSec);
       // Integrate the linear ramp, including any part past the speed ceiling.
       // This gives equal distance at 30, 60 and 120 Hz.
       final rampStep = _travelSeconds - previous;
       final rampArea =
-          (previous + _travelSeconds) * rampStep / (2 * accelerationSeconds) +
+          (previous + _travelSeconds) * rampStep / (2 * effectiveAccelSec) +
           (step - rampStep);
-      distance = speed * step + (topSpeed - speed) * rampArea;
+      distance =
+          effectiveBaseSpeed * step +
+          (effectiveTopSpeed - effectiveBaseSpeed) * rampArea;
       _currentWalkSpeed =
-          (speed + (topSpeed - speed) * _travelSeconds / accelerationSeconds) *
+          (effectiveBaseSpeed +
+              (effectiveTopSpeed - effectiveBaseSpeed) *
+                  _travelSeconds /
+                  effectiveAccelSec) *
           magnitude;
     } else {
       _travelSeconds = 0;
-      distance = speed * step;
-      _currentWalkSpeed = speed * magnitude;
+      distance = effectiveBaseSpeed * step;
+      _currentWalkSpeed = effectiveBaseSpeed * magnitude;
     }
 
     if (walkSpace != null) {

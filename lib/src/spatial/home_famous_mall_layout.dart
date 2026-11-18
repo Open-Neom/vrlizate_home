@@ -398,24 +398,24 @@ abstract final class HomeFamousMallLayout {
           for (final sz in const [-1.0, 1.0]) {
             pBox(
               'milano_arch_pier_a_${sx}_$sz',
-              sx * 4.8,
+              sx * 6.4,
               4.4,
-              sz * 9.6,
-              .82,
+              sz * 11.2,
+              .78,
               8.8,
-              .82,
+              .78,
               HomeLobbyFinish.plaster,
               0xFFEFE6D5,
               HomeLobbyShape.beveledBox,
             );
             pBox(
               'milano_arch_pier_b_${sx}_$sz',
-              sx * 9.6,
+              sx * 11.2,
               4.4,
-              sz * 4.8,
-              .82,
+              sz * 6.4,
+              .78,
               8.8,
-              .82,
+              .78,
               HomeLobbyFinish.plaster,
               0xFFEFE6D5,
               HomeLobbyShape.beveledBox,
@@ -463,44 +463,43 @@ abstract final class HomeFamousMallLayout {
         }
 
       case FamousMallArchetype.plazaArtzMexico:
-        // Plaza Artz / Antara (CDMX / Guadalajara): twin reflecting water pools
-        // flanking a wide central basalt bridge, 4 lush tree islands, and
-        // cantilevered warm-oak & volcanic-stone terraces under open sky.
+        // Plaza Artz / Antara (CDMX / Guadalajara): walkable flush reflecting
+        // glass-deck water mirrors + 4 corner garden trees leaving a massive,
+        // obstacle-free central park court under cantilevered oak pergolas.
         for (final side in const [-1.0, 1.0]) {
           pBox(
             'artz_water_curb_$side',
-            side * 4.6,
-            .28,
+            side * 5.2,
+            .008,
             0,
-            3.8,
-            .56,
+            3.6,
+            .016,
             6.8,
             HomeLobbyFinish.stone,
             0xFF334155,
-            HomeLobbyShape.beveledBox,
           );
           pBox(
             'artz_water_mirror_$side',
-            side * 4.6,
-            .58,
+            side * 5.2,
+            .016,
             0,
-            3.3,
-            .05,
+            3.1,
+            .012,
             6.3,
             HomeLobbyFinish.trim,
             0xFF0EA5E9,
           );
           for (final zSide in const [-1.0, 1.0]) {
-            final gx = side * 4.8;
-            final gz = zSide * 5.8;
+            final gx = side * 11.4;
+            final gz = zSide * 11.4;
             pBox(
               'artz_planter_${side}_$zSide',
               gx,
               .32,
               gz,
-              2.2,
+              2.0,
               .64,
-              2.2,
+              2.0,
               HomeLobbyFinish.stone,
               0xFF475569,
               HomeLobbyShape.beveledBox,
@@ -542,16 +541,16 @@ abstract final class HomeFamousMallLayout {
         }
 
       case FamousMallArchetype.dubaiGrandAtrium:
-        // The Dubai Mall Grand Atrium: monumental central cascading waterfall
-        // cylinder in a double marble fountain basin + champagne-gold columns.
+        // The Dubai Mall Grand Atrium: sleek sculpted central cascading
+        // waterfall column with wide open promenades all around it.
         pBox(
           'dubai_fountain_basin',
           0,
-          .34,
+          .24,
           0,
-          6.0,
-          .68,
-          6.0,
+          3.4,
+          .48,
+          3.4,
           HomeLobbyFinish.stone,
           0xFFF8FAFC,
           HomeLobbyShape.cylinder,
@@ -559,11 +558,11 @@ abstract final class HomeFamousMallLayout {
         pBox(
           'dubai_fountain_water',
           0,
-          .70,
+          .50,
           0,
-          5.3,
+          2.9,
           .06,
-          5.3,
+          2.9,
           HomeLobbyFinish.trim,
           0xFF38BDF8,
           HomeLobbyShape.cylinder,
@@ -573,9 +572,9 @@ abstract final class HomeFamousMallLayout {
           0,
           4.6,
           0,
-          3.2,
+          1.9,
           8.4,
-          3.2,
+          1.9,
           HomeLobbyFinish.trim,
           0xFF0284C7,
           HomeLobbyShape.cylinder,
@@ -585,9 +584,9 @@ abstract final class HomeFamousMallLayout {
           0,
           8.9,
           0,
-          4.6,
+          3.8,
           .42,
-          4.6,
+          3.8,
           HomeLobbyFinish.oak,
           0xFFD4AF37,
           HomeLobbyShape.cylinder,
@@ -596,9 +595,9 @@ abstract final class HomeFamousMallLayout {
           for (final sz in const [-1.0, 1.0]) {
             pBox(
               'dubai_diver_sculpture_${sx}_$sz',
-              sx * 1.75,
+              sx * 1.25,
               4.2,
-              sz * 1.75,
+              sz * 1.25,
               .22,
               1.45,
               .22,
@@ -608,12 +607,12 @@ abstract final class HomeFamousMallLayout {
             );
             pBox(
               'dubai_gold_column_${sx}_$sz',
-              sx * 9.2,
+              sx * 11.2,
               5.1,
-              sz * 9.2,
-              .76,
+              sz * 11.2,
+              .74,
               10.2,
-              .76,
+              .74,
               HomeLobbyFinish.oak,
               0xFFE5C158,
               HomeLobbyShape.cylinder,
@@ -634,16 +633,16 @@ abstract final class HomeFamousMallLayout {
         );
 
       case FamousMallArchetype.marinaCanalShoppes:
-        // Marina Bay Sands Canal Shoppes: central Rain Oculus vortex basin +
-        // East/West indoor turquoise canals flanked by 4 wide pedestrian walks.
+        // Marina Bay Sands Canal Shoppes: walkable glass-skywalk Rain Oculus
+        // & glowing turquoise indoor canals — zero blocking curbs across center.
         pBox(
           'marina_oculus_basin',
           0,
-          .34,
+          .008,
           0,
-          4.2,
-          .68,
-          4.2,
+          4.4,
+          .016,
+          4.4,
           HomeLobbyFinish.stone,
           0xFFE2E8F0,
           HomeLobbyShape.cylinder,
@@ -651,11 +650,11 @@ abstract final class HomeFamousMallLayout {
         pBox(
           'marina_oculus_water',
           0,
-          .70,
+          .016,
           0,
-          3.6,
-          .06,
-          3.6,
+          3.7,
+          .012,
+          3.7,
           HomeLobbyFinish.trim,
           0xFF06B6D4,
           HomeLobbyShape.cylinder,
@@ -664,35 +663,33 @@ abstract final class HomeFamousMallLayout {
           pBox(
             'marina_canal_curb_$side',
             side * 8.4,
-            .31,
+            .007,
             0,
             6.2,
-            .62,
+            .014,
             3.4,
             HomeLobbyFinish.stone,
             0xFFCBD5E1,
-            HomeLobbyShape.beveledBox,
           );
           pBox(
             'marina_canal_water_$side',
             side * 8.4,
-            .64,
+            .014,
             0,
             5.7,
-            .05,
+            .012,
             2.9,
             HomeLobbyFinish.trim,
             0xFF22D3EE,
           );
-          // Bridge balustrade rails framing the pedestrian crossings at x=±3.65.
           for (final railSide in const [-1.0, 1.0]) {
             pBox(
               'marina_bridge_deck_${side}_$railSide',
               side * 3.65,
-              .012,
+              .018,
               0,
-              2.1,
-              .024,
+              2.2,
+              .014,
               4.0,
               HomeLobbyFinish.oak,
               0xFFC29B61,

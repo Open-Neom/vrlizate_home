@@ -428,21 +428,21 @@ class HomeEcosystemLayout {
     zone = 'promenade';
     identity = null;
     accent = null;
-    // Garden islands and benches make places to pause while three continuous
-    // routes stay open: the central boulevard and the two 3 m side arcades.
-    // Islands sit BETWEEN crosswalks so every storefront remains approachable.
+    // Garden islands and benches flank the outer edges of the central plaza so
+    // the main promenade stays wide and effortless to walk or sprint through,
+    // while both 3 m side arcades and every storefront crosswalk remain clear.
     for (var row = -1; row < rows - 1; row++) {
       final z = firstRowZ + row * rowPitch + rowPitch / 2;
       for (final side in const [-1.0, 1.0]) {
-        final x = side * (row < 0 ? 5.2 : 3.8);
+        final x = side * (row < 0 ? 5.2 : 5.4);
         box(
           'planter_${row}_$side',
           x,
           .29,
           z,
-          2.1,
+          2.0,
           .58,
-          2.6,
+          2.4,
           HomeLobbyFinish.stone,
           0xFFB5AA96,
           HomeLobbyShape.beveledBox,
@@ -452,9 +452,9 @@ class HomeEcosystemLayout {
           x,
           .6,
           z,
-          2.22,
+          2.12,
           .12,
-          2.72,
+          2.52,
           HomeLobbyFinish.trim,
           0xFFD6C8AF,
           HomeLobbyShape.beveledBox,
@@ -464,9 +464,9 @@ class HomeEcosystemLayout {
           x,
           .661,
           z,
-          1.86,
+          1.76,
           .008,
-          2.34,
+          2.16,
           HomeLobbyFinish.plaster, // Fine matte grain; no wood fibers in soil.
           0xFF514438,
         );
@@ -480,7 +480,7 @@ class HomeEcosystemLayout {
             ),
           );
         }
-        final benchX = x + side * 2.0;
+        final benchX = x + side * 1.75;
         box(
           'bench_seat_${row}_$side',
           benchX,
@@ -2186,15 +2186,14 @@ class HomeEcosystemLayout {
       color: 0xFFE6DFD0,
     );
 
-    // Sculpted garden planters in the 4 colonnade courts (keeping all exhibit
-    // kiosks and crosswalks 100% clear).
+    // Sculpted perimeter garden planters tucked into the 4 outer corners of
+    // the Grand Plaza so the central N-S promenade (19 m clear) and the full
+    // E-W cruciform avenue (12.5 m clear) have zero central walking obstacles.
     final gardenCoords = <(String, double, double)>[
-      ('north_w', -7.6, 16.5),
-      ('north_e', 7.6, 16.5),
-      ('south_w', -7.6, 57.5),
-      ('south_e', 7.6, 57.5),
-      ('west_court', -22.5, cruciformCenterZ),
-      ('east_court', 22.5, cruciformCenterZ),
+      ('north_w', -12.6, 15.2),
+      ('north_e', 12.6, 15.2),
+      ('south_w', -12.6, 60.2),
+      ('south_e', 12.6, 60.2),
     ];
     for (final (id, gx, gz) in gardenCoords) {
       pBox(

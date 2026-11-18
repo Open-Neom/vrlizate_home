@@ -490,6 +490,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   bool _remoteBackDown = false;
   bool _remoteXDown = false, _remoteYDown = false;
   bool _remoteMenuDown = false, _remoteOptionsDown = false;
+  bool _remoteJumpDown = false;
   bool _libraryHiddenByUser = false;
   bool _modalLaserTriggerQueued = false;
   Node? _modalLaserTarget;
@@ -575,7 +576,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   String _currentZoneName = 'Biblioteca';
   double _time = 0.0;
   String _statusMessage =
-      'Izq.: caminar; borde sostenido: girar · Der.: mirar · A: elegir · B: detener';
+      'Izq.: caminar · ZL: Turbo (correr) · ZR: Saltar · Der.: mirar · A: elegir';
   // Open in touch-only preparation; hiding controls enters headset interaction.
   bool _hudHidden = false;
 
@@ -594,6 +595,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     'Y': 'Categoría +',
     'L': VrHomeTranslationConstants.controllerMenuActionLabel,
     'R': VrHomeTranslationConstants.optionsDockLabel,
+    'ZL': 'Turbo',
+    'ZR': 'Saltar',
   };
   static const _modalControllerActions = {
     'A': 'Seleccionar',
@@ -1367,6 +1370,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             state.btnY ||
             state.btnL ||
             state.btnR ||
+            state.btnZL ||
+            state.btnZR ||
             state.stickClick ||
             state.btnGrip ||
             state.laserSlideActive ||
@@ -1406,9 +1411,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         if (!_hasWorldModal) {
           if (state.btnX && !_remoteXDown) _cycleLibraryCategory(-1);
           if (state.btnY && !_remoteYDown) _cycleLibraryCategory(1);
+          if (state.btnZR && !_remoteJumpDown) {
+            if (_locomotion.triggerHop()) {
+              _bindings.onSound?.call(VrHomeSound.hover);
+            }
+          }
         }
         _remoteXDown = state.btnX;
         _remoteYDown = state.btnY;
+        _remoteJumpDown = state.btnZR;
         if (_hasWorldModal) {
           _libraryDpadLatch.reset();
           final modalX = state.dpadX.abs() > state.stickX.abs()
@@ -1517,6 +1528,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _remoteYDown = state.btnY;
     _remoteMenuDown = state.btnL || state.stickClick;
     _remoteOptionsDown = state.btnR;
+    _remoteJumpDown = state.btnZR;
     _remoteLaserMode =
         _isRemoteConnected && VrHomeRemotePointer.isPointing(state);
     _remoteLaserHitsTarget = false;
@@ -2207,6 +2219,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         applyHomeLookRotation(_rig, turnRate, pitchRate, frameDt);
       }
       if (!_hasWorldModal && (!_isRemoteConnected || !state.isNeutralized)) {
+        final turboHeld = _isRemoteConnected && state.btnZL;
         _rig.eyeCenter = _locomotion.applySmoothRigLocomotion(
           rig: _rig,
           stickX: _isRemoteConnected ? state.stickX : _gamepadMotion.moveX,
@@ -2218,12 +2231,19 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           // The right control may adjust elevation while the left owns the
           // heading. Only an explicit horizontal look overrides that turn.
           manualLook: turnRate.abs() > 0.015,
+          turbo: turboHeld,
           dt: frameDt,
           speed: 1.6,
           maxSpeed: 4.8,
           accelerationSeconds: 2.4,
           walkSpace: _walkSpace,
         );
+        // Apply vertical jump physics (`ZR` Saltar) + sustained TURBO running cadence.
+        final gait = _locomotion.stepVerticalAndGait(frameDt);
+        _rig.eyeCenter.y = gait.eyeY;
+        if (gait.landed) {
+          _bindings.onSound?.call(VrHomeSound.click);
+        }
         // The controller's image UVs and acoustic echo are not a measured
         // viewer height. Only the visor's own pose may translate its eyes.
         final room = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
@@ -2234,6 +2254,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                 '${room.title} · Apunta a una exhibición y pulsa A';
           });
         }
+      } else {
+        final gait = _locomotion.stepVerticalAndGait(frameDt);
+        _rig.eyeCenter.y = gait.eyeY;
       }
     }
 
