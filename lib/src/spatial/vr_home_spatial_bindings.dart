@@ -80,6 +80,30 @@ class VrHomePrompt {
   bool get isCloseAction => guidance == null;
 }
 
+/// Pure-SDK metadata describing a nearby plaza NPC when the player initiates
+/// spatial conversation. Inference and TTS belong strictly to the host app.
+class VrHomeNpcDescriptor {
+  const VrHomeNpcDescriptor({
+    required this.id,
+    required this.displayName,
+    required this.role,
+    required this.speciesName,
+    required this.ambientComment,
+    required this.position,
+    this.nearestRoomTitle,
+    this.plazaBanner,
+  });
+
+  final String id;
+  final String displayName;
+  final String role;
+  final String speciesName;
+  final String ambientComment;
+  final vm.Vector3 position;
+  final String? nearestRoomTitle;
+  final String? plazaBanner;
+}
+
 typedef VrHomePreviewResolver =
     DemoPreviewData Function({
       required String demoId,
@@ -129,6 +153,13 @@ class VrHomeSpatialBindings {
     this.assistantText,
     this.assistantBusy,
     this.assistantListening,
+    this.onNpcAction,
+    this.npcChanges,
+    this.npcText,
+    this.npcBusy,
+    this.npcListening,
+    this.npcSpeakingTts,
+    this.npcLatestBark,
     this.initialQuality = VrQualityPreset.medium,
     this.calibrationExperienceId,
     this.assistantTitle = 'Asistente espacial',
@@ -234,6 +265,21 @@ class VrHomeSpatialBindings {
   final String Function()? assistantText;
   final bool Function()? assistantBusy;
   final bool Function()? assistantListening;
+
+  /// Optional host-backed NPC dialogue & optional TTS (`open`, `recommend`,
+  /// `about_place`, `surprise`, `listen`, `tts`, `cancel`).
+  final Future<void> Function(
+    String action,
+    VrHomeNpcDescriptor npc,
+    Map<String, Object?> context,
+  )?
+  onNpcAction;
+  final Listenable? npcChanges;
+  final String Function()? npcText;
+  final bool Function()? npcBusy;
+  final bool Function()? npcListening;
+  final bool Function()? npcSpeakingTts;
+  final String? Function(String visitorId)? npcLatestBark;
   final VrQualityPreset initialQuality;
   final String? calibrationExperienceId;
   final String assistantTitle;

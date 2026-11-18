@@ -83,6 +83,24 @@ class VirtualHomeWorldBuilder {
   /// Shared zero-GC instanced stage for NPCs and remote multiplayer user avatars.
   VrPeerAvatarStage? get peerStage => _crowd?.peerStage;
 
+  HomePlazaVisitorState? findFocusedVisitor(
+    vm.Vector3 eyePosition,
+    vm.Vector3 viewerForward, {
+    double maxDistance = 3.8,
+    double minForwardDot = 0.68,
+  }) => _crowd?.findFocusedVisitor(
+    eyePosition,
+    viewerForward,
+    maxDistance: maxDistance,
+    minForwardDot: minForwardDot,
+  );
+
+  void setVisitorTalking(String? visitorId) =>
+      _crowd?.setVisitorTalking(visitorId);
+
+  void setVisitorComment(String visitorId, String comment) =>
+      _crowd?.setVisitorComment(visitorId, comment);
+
   void setAvatarAppearance(VrAvatarAppearance? appearance) {
     _avatarAppearance = appearance;
     for (final showcase in _showcases) {
@@ -124,7 +142,11 @@ class VirtualHomeWorldBuilder {
     }
     _showcases.clear();
     _crowd?.dispose();
-    _crowd = HomePlazaCrowd.plan(layout: ecosystemLayout, theme: theme);
+    _crowd = HomePlazaCrowd.plan(
+      layout: ecosystemLayout,
+      theme: theme,
+      plazaBannerText: plazaBannerText,
+    );
     final previousRoot = _environmentRoot;
     if (previousRoot != null) previousRoot.parent?.remove(previousRoot);
     waypoints.clear();
@@ -1116,6 +1138,8 @@ class VirtualHomeWorldBuilder {
     vm.Vector3? eyePosition,
     vm.Vector3? viewerForward,
     void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
+    bool hideBarkBubble = false,
+    bool canTalkToVisitors = false,
   }) {
     if (eyePosition != null) observe(eyePosition);
     _crowd?.tick(
@@ -1123,6 +1147,8 @@ class VirtualHomeWorldBuilder {
       eyePosition: eyePosition,
       viewerForward: viewerForward,
       onVisitorGreeted: onVisitorGreeted,
+      hideBarkBubble: hideBarkBubble,
+      canTalkToVisitors: canTalkToVisitors,
     );
     if (identical(_hoveredWaypoint, hoveredWaypoint)) return;
     _hoveredWaypoint?.material.emissiveFactor.setValues(0, 0, 0, 1);

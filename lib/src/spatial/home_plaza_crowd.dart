@@ -1,5 +1,8 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/painting.dart';
 import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate_avatar/vrlizate_avatar.dart';
@@ -20,6 +23,10 @@ final class HomePlazaVisitorState {
     required this.walkSpeed,
     required this.phaseOffset,
     required this.conversationalist,
+    this.displayName = 'Visitante',
+    this.role = 'Explorador VR',
+    this.nearestRoomTitle,
+    this.ambientComment = '¡Qué buena vibra se siente en esta plaza!',
     this.partnerYaw,
   }) : assert(routePoints.isNotEmpty),
        x = routePoints.first.x,
@@ -33,7 +40,13 @@ final class HomePlazaVisitorState {
   final double walkSpeed;
   final double phaseOffset;
   final bool conversationalist;
+  final String displayName;
+  final String role;
+  final String? nearestRoomTitle;
   final double? partnerYaw;
+
+  String ambientComment;
+  bool talkingToPlayer = false;
 
   double x;
   double z;
@@ -49,6 +62,32 @@ final class HomePlazaVisitorState {
     final stepDt = dt.isFinite ? dt.clamp(0.0, 0.25) : 0.0;
     final blinkWave = math.sin(time * 0.9 + phaseOffset * 3.1);
     final blink = blinkWave > 0.985 ? ((blinkWave - 0.985) / 0.015) : 0.0;
+
+    // Active conversation lock: hold position, face the player smoothly, and
+    // animate warm conversational gestures until the dialogue panel closes.
+    if (talkingToPlayer && playerEye != null) {
+      greetingPlayer = true;
+      vx = 0.0;
+      vz = 0.0;
+      final dx = playerEye.x - x;
+      final dz = playerEye.z - z;
+      if (dx * dx + dz * dz > 0.01) {
+        final desiredYaw = math.atan2(dx, dz);
+        yaw = _lerpAngle(yaw, desiredYaw, (stepDt * 6.5).clamp(0.0, 1.0));
+      }
+      final talkPhase = time * 2.1 + phaseOffset;
+      pose = VrAvatarPose(
+        nod: math.sin(talkPhase * 1.3) * 0.075,
+        look: math.sin(talkPhase * 0.65) * 0.11,
+        tilt: math.cos(talkPhase * 0.5) * 0.04,
+        leftArmFlexion: 0.34 + math.sin(talkPhase * 1.7) * 0.18,
+        rightArmFlexion: 0.28 + math.cos(talkPhase * 1.45) * 0.16,
+        leftArmAbduction: 0.11,
+        rightArmAbduction: 0.11,
+        blink: blink,
+      );
+      return;
+    }
 
     // Friendly proximity reaction: when the player walks within 3.4 m, pause
     // and turn smoothly toward the player with a welcoming wave!
@@ -184,9 +223,55 @@ final class HomePlazaCrowd {
     }
   }
 
+  static const _npcPersonas = <(String name, String role)>[
+    ('Valeria', 'Exploradora VR'),
+    ('Mateo', 'Curador de Mundos'),
+    ('Nexo-7', 'Guía Sintético'),
+    ('Kitsune Sol', 'Viajero Curioso'),
+    ('Sofía', 'Arquitecta Espacial'),
+    ('Axo-Luma', 'Embajador Bio-Digital'),
+    ('Diego', 'Coleccionista Arcade'),
+    ('Brote Jade', 'Botánico Virtual'),
+    ('Órbita-3', 'Cronista Espacial'),
+    ('Camila', 'Crítica de Cine 3D'),
+    ('Prisma', 'Espíritu Lumínico'),
+    ('Emilio', 'Visitante de la Plaza'),
+  ];
+
+  static String _seedCommentFor({
+    required int index,
+    String? roomTitle,
+    String? plazaBannerText,
+  }) {
+    final cleanPlaza = plazaBannerText
+        ?.split('\n')
+        .first
+        .trim();
+    if (roomTitle != null && roomTitle.trim().isNotEmpty) {
+      return switch (index % 6) {
+        0 => '¡Hola! El acceso a «$roomTitle» luce espectacular hoy.',
+        1 => 'Estaba admirando «$roomTitle»… vale mucho la pena entrar.',
+        2 => '¿Ya probaste «$roomTitle»? Es de mis rincones favoritos aquí.',
+        3 => 'Me encanta caminar por esta ala rumbo a «$roomTitle».',
+        4 => 'Qué fluidez tiene este espacio cerca de «$roomTitle».',
+        _ => 'Si buscas algo distinto, asómate por «$roomTitle».',
+      };
+    }
+    final where = (cleanPlaza != null && cleanPlaza.isNotEmpty)
+        ? cleanPlaza
+        : 'esta plaza VR';
+    return switch (index % 4) {
+      0 => '¡Qué gusto saludarte en $where! Pregúntame lo que quieras.',
+      1 => 'La atmósfera sonora y la luz de $where relajan muchísimo.',
+      2 => 'Siempre descubro portales nuevos paseando por $where.',
+      _ => '¡Bienvenido! Si quieres recomendaciones, conversemos un momento.',
+    };
+  }
+
   factory HomePlazaCrowd.plan({
     required HomeEcosystemLayout layout,
     VrHomeThemeData theme = VrHomeThemeData.aurora,
+    String? plazaBannerText,
   }) {
     final palettes = <VrAvatarAppearance>[
       VrAvatarAppearance(
@@ -308,6 +393,8 @@ final class HomePlazaCrowd {
           math.atan2(pB.inwardForwardX, pB.inwardForwardZ),
           math.atan2(pC.inwardForwardX, pC.inwardForwardZ),
         ];
+        final persona = _npcPersonas[i % _npcPersonas.length];
+        final roomTitle = pA.room.title;
         final visitor = HomePlazaVisitorState(
           id: 'plaza_stroller_$i',
           appearance: palettes[i % palettes.length],
@@ -316,6 +403,14 @@ final class HomePlazaCrowd {
           walkSpeed: 1.04 + (i % 4) * 0.09,
           phaseOffset: i * 1.37,
           conversationalist: false,
+          displayName: persona.$1,
+          role: persona.$2,
+          nearestRoomTitle: roomTitle,
+          ambientComment: _seedCommentFor(
+            index: i,
+            roomTitle: roomTitle,
+            plazaBannerText: plazaBannerText,
+          ),
         );
         // Distribute initial positions along their route so they don't bunch up
         if (pts.length >= 2) {
@@ -349,6 +444,7 @@ final class HomePlazaCrowd {
               loop[(i + k) % loop.length].$2,
             ),
         ];
+        final persona = _npcPersonas[i % _npcPersonas.length];
         visitors.add(
           HomePlazaVisitorState(
             id: 'plaza_stroller_$i',
@@ -358,6 +454,12 @@ final class HomePlazaCrowd {
             walkSpeed: 1.12,
             phaseOffset: i * 1.6,
             conversationalist: false,
+            displayName: persona.$1,
+            role: persona.$2,
+            ambientComment: _seedCommentFor(
+              index: i,
+              plazaBannerText: plazaBannerText,
+            ),
           ),
         );
       }
@@ -375,6 +477,14 @@ final class HomePlazaCrowd {
       final yaw1To2 = math.atan2(x2 - x1, z2 - z1);
       final yaw2To1 = math.atan2(x1 - x2, z1 - z2);
       final baseIdx = 8 + p * 2;
+      final personaA = _npcPersonas[baseIdx % _npcPersonas.length];
+      final personaB = _npcPersonas[(baseIdx + 1) % _npcPersonas.length];
+      final roomA = portals.isNotEmpty
+          ? portals[(p * 3) % portals.length].room.title
+          : null;
+      final roomB = portals.length > 1
+          ? portals[(p * 3 + 1) % portals.length].room.title
+          : roomA;
       visitors.add(
         HomePlazaVisitorState(
           id: 'plaza_social_${p}_a',
@@ -385,6 +495,14 @@ final class HomePlazaCrowd {
           phaseOffset: p * 2.1 + 0.4,
           conversationalist: true,
           partnerYaw: yaw1To2,
+          displayName: personaA.$1,
+          role: personaA.$2,
+          nearestRoomTitle: roomA,
+          ambientComment: _seedCommentFor(
+            index: baseIdx,
+            roomTitle: roomA,
+            plazaBannerText: plazaBannerText,
+          ),
         ),
       );
       visitors.add(
@@ -397,6 +515,14 @@ final class HomePlazaCrowd {
           phaseOffset: p * 2.1 + 1.5,
           conversationalist: true,
           partnerYaw: yaw2To1,
+          displayName: personaB.$1,
+          role: personaB.$2,
+          nearestRoomTitle: roomB,
+          ambientComment: _seedCommentFor(
+            index: baseIdx + 1,
+            roomTitle: roomB,
+            plazaBannerText: plazaBannerText,
+          ),
         ),
       );
     }
@@ -417,20 +543,142 @@ final class HomePlazaCrowd {
   static Geometry? _sharedOrbGeometry;
   InstancedMesh? _aerialOrbMesh;
   Node? _aerialOrbNode;
+  final Map<String, VrTextLabel> _barkCache = <String, VrTextLabel>{};
+  final Set<String> _barkPendingKeys = <String>{};
+  VrTextLabel? _activeBarkLabel;
   double _lastTime = -1;
   double _aiAccum = 1.0;
   double _orbAccum = 1.0;
   double _lastGreetingAudioTime = -10.0;
+  int _mountEpoch = 0;
   bool _gpuMounted = false;
   bool _disposed = false;
 
   bool get isGpuMounted => _gpuMounted;
+
+  HomePlazaVisitorState? visitorById(String id) {
+    for (final v in visitors) {
+      if (v.id == id) return v;
+    }
+    return null;
+  }
+
+  /// Locks [visitorId] in an attentive conversational pose facing the player,
+  /// or clears all conversation locks when [visitorId] is `null`.
+  void setVisitorTalking(String? visitorId) {
+    for (final v in visitors) {
+      v.talkingToPlayer = visitorId != null && v.id == visitorId;
+    }
+    _aiAccum = 1.0;
+  }
+
+  /// Updates an NPC's floating ambient comment (e.g. after Itzli generates a
+  /// fresh in-character remark) without allocating any GPU resources until
+  /// that visitor is focused by the player.
+  void setVisitorComment(String visitorId, String comment) {
+    final v = visitorById(visitorId);
+    if (v == null) return;
+    final compact = comment.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.isEmpty) return;
+    final runes = compact.runes.take(151).toList(growable: false);
+    v.ambientComment = runes.length <= 150
+        ? String.fromCharCodes(runes)
+        : '${String.fromCharCodes(runes.take(149))}…';
+  }
+
+  /// Pure-CPU cone & distance query (`< 0.002 ms`, `0` allocations) returning
+  /// the single nearby visitor best aligned with the player's view or ray.
+  HomePlazaVisitorState? findFocusedVisitor(
+    vm.Vector3 eyePosition,
+    vm.Vector3 viewerForward, {
+    double maxDistance = 3.8,
+    double minForwardDot = 0.68,
+  }) {
+    final fxRaw = viewerForward.x;
+    final fzRaw = viewerForward.z;
+    final fLen = math.sqrt(fxRaw * fxRaw + fzRaw * fzRaw);
+    final fx = fLen > 1e-5 ? fxRaw / fLen : 0.0;
+    final fz = fLen > 1e-5 ? fzRaw / fLen : -1.0;
+    final maxDistSq = maxDistance * maxDistance;
+
+    HomePlazaVisitorState? best;
+    var bestScore = -1.0;
+    for (var i = 0; i < visitors.length; i++) {
+      final v = visitors[i];
+      final dx = v.x - eyePosition.x;
+      final dz = v.z - eyePosition.z;
+      final distSq = dx * dx + dz * dz;
+      if (distSq > maxDistSq || distSq < 0.09) continue;
+      final dist = math.sqrt(distSq);
+      final dot = (dx * fx + dz * fz) / dist;
+      if (dot < minForwardDot) continue;
+      final score = dot / (0.65 + dist * 0.25);
+      if (score > bestScore) {
+        bestScore = score;
+        best = v;
+      }
+    }
+    return best;
+  }
+
+  /// Pure-CPU rasterizer for the single floating NPC speech card. Testable in
+  /// headless environments without an Impeller GPU context.
+  @visibleForTesting
+  static Future<VrTextBitmap> rasterizeBarkBubble(
+    String header,
+    String comment, {
+    String? actionHint,
+    Color accent = const Color(0xFF38BDF8),
+  }) async {
+    final fullText = actionHint == null || actionHint.isEmpty
+        ? '$header\n«$comment»'
+        : '$header\n«$comment»\n$actionHint';
+    final bitmap = await VrTextRaster.rasterize(
+      fullText,
+      color: const Color(0xFFF8FAFC),
+      fontWeight: FontWeight.w700,
+      fontSize: 52,
+      paddingPx: 22,
+      maxLines: actionHint == null ? 3 : 4,
+      maxWidthPx: 1120,
+    );
+    final pixels = Uint8List.fromList(bitmap.pixels);
+    final w = bitmap.width;
+    final h = bitmap.height;
+    const bgR = 0x0B, bgG = 0x13, bgB = 0x22;
+    final accentArgb = accent.toARGB32();
+    final acR = (accentArgb >> 16) & 255;
+    final acG = (accentArgb >> 8) & 255;
+    final acB = accentArgb & 255;
+    const borderBarPx = 4;
+
+    for (var y = 0; y < h; y++) {
+      final isAccentBar = y < borderBarPx || y >= h - borderBarPx;
+      final rowOffset = y * w * 4;
+      for (var x = 0; x < w; x++) {
+        final idx = rowOffset + x * 4;
+        final alpha = pixels[idx + 3];
+        final baseR = isAccentBar ? acR : bgR;
+        final baseG = isAccentBar ? acG : bgG;
+        final baseB = isAccentBar ? acB : bgB;
+        pixels[idx] =
+            (pixels[idx] * alpha + baseR * (255 - alpha) + 127) ~/ 255;
+        pixels[idx + 1] =
+            (pixels[idx + 1] * alpha + baseG * (255 - alpha) + 127) ~/ 255;
+        pixels[idx + 2] =
+            (pixels[idx + 2] * alpha + baseB * (255 - alpha) + 127) ~/ 255;
+        pixels[idx + 3] = 246;
+      }
+    }
+    return VrTextBitmap(pixels, w, h);
+  }
 
   /// Attaches the shared [VrPeerAvatarStage] (`3` `InstancedMesh`es total for
   /// all visitors + remote users) and `1` `InstancedMesh` for the 6 aerial orbs.
   void mountGpu(Node parent) {
     if (_disposed || _gpuMounted || !Scene.isReadyToRender) return;
     _gpuMounted = true;
+    ++_mountEpoch;
     peerStage.mountGpu(root);
 
     final orbGeometry = _sharedOrbGeometry ??= SphereGeometry(
@@ -467,11 +715,97 @@ final class HomePlazaCrowd {
     parent.add(root);
   }
 
+  void _updateOverheadBark({
+    required vm.Vector3? eyePosition,
+    required vm.Vector3? viewerForward,
+    required bool hideBarkBubble,
+    required bool canTalkToVisitors,
+  }) {
+    if (!_gpuMounted ||
+        hideBarkBubble ||
+        eyePosition == null ||
+        viewerForward == null) {
+      _activeBarkLabel?.node.visible = false;
+      _activeBarkLabel = null;
+      return;
+    }
+    final focused = findFocusedVisitor(
+      eyePosition,
+      viewerForward,
+      maxDistance: 3.55,
+      minForwardDot: 0.65,
+    );
+    if (focused == null) {
+      _activeBarkLabel?.node.visible = false;
+      _activeBarkLabel = null;
+      return;
+    }
+    final key = '${focused.id}|${focused.ambientComment}|$canTalkToVisitors';
+    final cached = _barkCache[key];
+    if (cached != null) {
+      if (!identical(_activeBarkLabel, cached)) {
+        _activeBarkLabel?.node.visible = false;
+        _activeBarkLabel = cached;
+      }
+      final labelY = focused.appearance.heightMeters + 0.36;
+      cached.node.localTransform = vm.Matrix4.translationValues(
+        focused.x,
+        labelY,
+        focused.z,
+      );
+      cached.faceCamera(eyePosition);
+      cached.node.visible = true;
+      return;
+    }
+
+    _activeBarkLabel?.node.visible = false;
+    _activeBarkLabel = null;
+    if (!Scene.isReadyToRender || _barkPendingKeys.contains(key)) return;
+    _barkPendingKeys.add(key);
+    final epoch = _mountEpoch;
+    final header = '${focused.displayName} · ${focused.role}';
+    final comment = focused.ambientComment;
+    final hint = canTalkToVisitors ? '[ A · Hablar con Itzli ]' : null;
+    rasterizeBarkBubble(
+      header,
+      comment,
+      actionHint: hint,
+      accent: theme.accent,
+    ).then((bitmap) {
+      _barkPendingKeys.remove(key);
+      if (_disposed || !_gpuMounted || epoch != _mountEpoch) return;
+      if (!Scene.isReadyToRender) return;
+      if (_barkCache.length >= 16) {
+        final oldestKey = _barkCache.keys.first;
+        final evicted = _barkCache.remove(oldestKey);
+        if (identical(_activeBarkLabel, evicted)) _activeBarkLabel = null;
+        evicted?.node.parent?.remove(evicted.node);
+      }
+      final label = VrTextLabel.fromBitmap(
+        bitmap,
+        '$header\n$comment',
+        center: vm.Vector3(focused.x, focused.appearance.heightMeters + 0.36, focused.z),
+        height: math.min(0.30, 1.45 / bitmap.aspect),
+        name: 'npc_bark_${focused.id}',
+      );
+      label.node
+        ..raycastable = false
+        ..shadowCastingMode = ShadowCastingMode.off
+        ..visible = false;
+      root.add(label.node);
+      _barkCache[key] = label;
+    }).catchError((Object _) {
+      _barkPendingKeys.remove(key);
+    });
+  }
+
   void tick(
     double time, {
     vm.Vector3? eyePosition,
     vm.Vector3? viewerForward,
     void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
+    bool hideBarkBubble = false,
+    bool canTalkToVisitors = false,
   }) {
     if (_disposed || !time.isFinite) return;
     final dt = _lastTime < 0 ? (1 / 60) : (time - _lastTime).clamp(0.0, 0.1);
@@ -513,6 +847,13 @@ final class HomePlazaCrowd {
       viewerForward: viewerForward,
     );
 
+    _updateOverheadBark(
+      eyePosition: eyePosition,
+      viewerForward: viewerForward,
+      hideBarkBubble: hideBarkBubble,
+      canTalkToVisitors: canTalkToVisitors,
+    );
+
     if (_gpuMounted && _aerialOrbMesh != null) {
       _orbAccum += dt;
       if (_orbAccum >= (1.0 / 24.0)) {
@@ -536,7 +877,14 @@ final class HomePlazaCrowd {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    ++_mountEpoch;
     peerStage.dispose();
+    for (final label in _barkCache.values) {
+      label.node.parent?.remove(label.node);
+    }
+    _barkCache.clear();
+    _barkPendingKeys.clear();
+    _activeBarkLabel = null;
     _aerialOrbMesh?.clearInstances();
     _aerialOrbNode?.detach();
     _aerialOrbMesh = null;
