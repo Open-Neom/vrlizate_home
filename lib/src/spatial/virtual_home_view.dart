@@ -598,24 +598,24 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     'B': 'Atrás',
     'X': 'Voz',
     'Y': 'Menú',
-    'L': 'WordSphr',
-    'R': 'Menú VR',
+    'L': 'Escribir',
+    'R': 'Menú',
   };
   static const _npcFocusControllerActions = {
     'A': 'Saludar',
     'B': 'Atrás',
     'X': 'Escuchar',
     'Y': 'Charlar',
-    'L': 'WordSphr',
-    'R': 'Menú VR',
+    'L': 'Escribir',
+    'R': 'Menú',
   };
   static const _modalControllerActions = {
     'A': 'Aceptar',
     'B': 'Cerrar',
     'X': 'Voz',
     'Y': 'Menú',
-    'L': 'WordSphr',
-    'R': 'Menú VR',
+    'L': 'Escribir',
+    'R': 'Menú',
   };
 
   @override
