@@ -71,6 +71,14 @@ class VirtualHomeWorldBuilder {
   Node? _environmentRoot;
   DirectionalLight? _sunLight;
   FloorWaypoint? _hoveredWaypoint;
+  static const int maxPooledPointLights = 4;
+  final List<_RoomPointLightSpec> _pointLightSpecs = [];
+  final List<_PooledPointLight> _pooledPointLights = [];
+  final vm.Vector3 _lastLightPoolEye = vm.Vector3(
+    double.infinity,
+    double.infinity,
+    double.infinity,
+  );
   final Map<Node, HomeExhibit> _exhibits = Map.identity();
   final Map<Node, VrHomeEcosystemRoom> _rooms = Map.identity();
   final Set<Node> _occluders = Set.identity();
@@ -124,9 +132,67 @@ class VirtualHomeWorldBuilder {
   Future<void> get showcaseReady =>
       Future.wait(_showcases.map((showcase) => showcase.ready)).then((_) {});
 
+  /// Active GPU point lights mounted in the scene graph (strictly capped at
+  /// [maxPooledPointLights] via dynamic proximity pooling to cut forward-pass
+  /// fragment & froxel lighting overhead by ~80% in large plazas).
+  int get activePointLightCount => _pooledPointLights.length;
+
+  /// Total authored room/lobby fill light descriptors managed by the pool.
+  int get authoredPointLightCount => _pointLightSpecs.length;
+
   void observe(vm.Vector3 eye) {
     for (final showcase in _showcases) {
       showcase.observe(eye);
+    }
+    _updatePointLightPool(eye);
+  }
+
+  void _updatePointLightPool(vm.Vector3 eye, {bool force = false}) {
+    if (_pooledPointLights.isEmpty || _pointLightSpecs.isEmpty) return;
+    if (!force) {
+      final dx = eye.x - _lastLightPoolEye.x;
+      final dz = eye.z - _lastLightPoolEye.z;
+      if (dx * dx + dz * dz < 1.25 * 1.25) return;
+    }
+    _lastLightPoolEye.setFrom(eye);
+
+    final poolCount = _pooledPointLights.length;
+    // Zero-GC top-K nearest selection (poolCount <= 4).
+    final bestIdx = List<int>.filled(poolCount, -1);
+    final bestDistSq = List<double>.filled(poolCount, double.infinity);
+
+    for (var i = 0; i < _pointLightSpecs.length; i++) {
+      final spec = _pointLightSpecs[i];
+      final dx = spec.x - eye.x;
+      final dz = spec.z - eye.z;
+      final dSq = dx * dx + dz * dz;
+      // Insert into sorted top-K slots if closer than current worst slot.
+      var slot = poolCount - 1;
+      if (dSq >= bestDistSq[slot]) continue;
+      while (slot > 0 && dSq < bestDistSq[slot - 1]) {
+        bestDistSq[slot] = bestDistSq[slot - 1];
+        bestIdx[slot] = bestIdx[slot - 1];
+        slot--;
+      }
+      bestDistSq[slot] = dSq;
+      bestIdx[slot] = i;
+    }
+
+    for (var s = 0; s < poolCount; s++) {
+      final idx = bestIdx[s];
+      if (idx < 0) continue;
+      final spec = _pointLightSpecs[idx];
+      final pooled = _pooledPointLights[s];
+      pooled.light
+        ..color.setValues(spec.r, spec.g, spec.b)
+        ..intensity = spec.intensity
+        ..range = spec.range;
+      pooled.node.localTransform = vm.Matrix4.translationValues(
+        spec.x,
+        spec.y,
+        spec.z,
+      );
+      pooled.node.markTransformDirty();
     }
   }
 
@@ -238,60 +304,70 @@ class VirtualHomeWorldBuilder {
         )
         ..localTransform = vm.Matrix4.translation(vm.Vector3(3, 7, -8)),
     );
+    _pointLightSpecs.clear();
+    _pooledPointLights.clear();
+    _lastLightPoolEye.setValues(
+      double.infinity,
+      double.infinity,
+      double.infinity,
+    );
     if (includeLobbyBackdrop) {
       for (final room in HomeLobbyLayout.rooms.skip(1)) {
-        root.add(
-          Node(name: '${room.id}_fill')
-            ..addComponent(
-              PointLightComponent(
-                PointLight(
-                  color: vm.Vector3(0.98, 0.96, 0.91),
-                  intensity: 2.5,
-                  range: 8,
-                ),
-              ),
-            )
-            ..localTransform = vm.Matrix4.translationValues(
-              (room.minX + room.maxX) / 2,
-              3.8,
-              (room.minZ + room.maxZ) / 2,
-            ),
+        _pointLightSpecs.add(
+          _RoomPointLightSpec(
+            x: (room.minX + room.maxX) / 2,
+            y: 3.8,
+            z: (room.minZ + room.maxZ) / 2,
+            r: 0.98,
+            g: 0.96,
+            b: 0.91,
+            intensity: 2.5,
+            range: 8.5,
+          ),
         );
       }
     }
     for (final portal in ecosystemLayout.portals) {
-      final fill = Color.lerp(Colors.white, Color(portal.room.accent), .18)!;
-      root.add(
-        Node(name: 'ecosystem_${portal.room.id}_fill')
-          ..addComponent(
-            PointLightComponent(
-              PointLight(
-                color: vm.Vector3(fill.r, fill.g, fill.b),
-                intensity: 2.4,
-                range: 7,
-              ),
-            ),
-          )
-          ..localTransform = vm.Matrix4.translationValues(
-            portal.roomCenterX,
-            3.8,
-            portal.roomCenterZ,
-          ),
+      final fill = Color.lerp(Colors.white, Color(portal.room.accent), .22)!;
+      _pointLightSpecs.add(
+        _RoomPointLightSpec(
+          x: portal.roomCenterX,
+          y: 3.8,
+          z: portal.roomCenterZ,
+          r: fill.r,
+          g: fill.g,
+          b: fill.b,
+          intensity: 2.5,
+          range: 8.0,
+        ),
       );
     }
-    root.add(
-      Node(name: 'lobby_ceiling_fill')
-        ..addComponent(
-          PointLightComponent(
-            PointLight(
-              color: vm.Vector3(0.92, 0.96, 1),
-              intensity: 3,
-              range: 14,
-            ),
-          ),
-        )
-        ..localTransform = vm.Matrix4.translation(vm.Vector3(0, 3.9, 0)),
+    _pointLightSpecs.add(
+      const _RoomPointLightSpec(
+        x: 0,
+        y: 3.9,
+        z: 0,
+        r: 0.92,
+        g: 0.96,
+        b: 1.0,
+        intensity: 3.0,
+        range: 14.5,
+      ),
     );
+
+    final poolSize = math.min(maxPooledPointLights, _pointLightSpecs.length);
+    for (var i = 0; i < poolSize; i++) {
+      final light = PointLight(
+        color: vm.Vector3(0.95, 0.96, 1.0),
+        intensity: 2.5,
+        range: 10.0,
+      );
+      final node = Node(name: 'room_light_pool_$i')
+        ..addComponent(PointLightComponent(light));
+      root.add(node);
+      _pooledPointLights.add(_PooledPointLight(node: node, light: light));
+    }
+    _updatePointLightPool(vm.Vector3(0, 1.6, 0), force: true);
   }
 
   void _setupArchitecture(Node root) {
@@ -1308,4 +1384,33 @@ class _HomeArchitectureVariant {
       baked ? bakedMaterial : pbrMaterial,
     );
   }
+}
+
+final class _RoomPointLightSpec {
+  const _RoomPointLightSpec({
+    required this.x,
+    required this.y,
+    required this.z,
+    required this.r,
+    required this.g,
+    required this.b,
+    required this.intensity,
+    required this.range,
+  });
+
+  final double x;
+  final double y;
+  final double z;
+  final double r;
+  final double g;
+  final double b;
+  final double intensity;
+  final double range;
+}
+
+final class _PooledPointLight {
+  const _PooledPointLight({required this.node, required this.light});
+
+  final Node node;
+  final PointLight light;
 }

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:vrlizate/vrlizate.dart' show VrStickEdgeTurn;
 import 'package:vrlizate_scene/vrlizate_scene.dart'
-    show StereoHeadRig, VrStickLook;
+    show StereoHeadRig, VrStickLook, VrTurnMode;
 
 import 'virtual_home_models.dart';
 import 'home_ecosystem_layout.dart';
@@ -70,6 +70,50 @@ class VirtualHomeLocomotionController {
   double _lastGaitSin = 0;
   final vm.Vector3 _lastMoveDirection = vm.Vector3.zero();
   final VrStickEdgeTurn _edgeTurn = VrStickEdgeTurn();
+  bool _snapTurnArmed = true;
+
+  /// Re-arms the discrete horizontal snap-turn latch (called when stick centers
+  /// or user leaves a modal).
+  void resetSnapTurnLatch() {
+    _snapTurnArmed = true;
+  }
+
+  /// Applies manual look rotation honoring [turnMode] (`smooth`, `snap30`, or
+  /// `snap45` anti-nausea discrete turn with hysteresis latch). Returns `true`
+  /// on the frame a discrete snap turn fires.
+  bool applyStickLook(
+    StereoHeadRig rig,
+    double x,
+    double y,
+    double dt, {
+    VrTurnMode turnMode = VrTurnMode.smooth,
+  }) {
+    if (!x.isFinite || !y.isFinite || !dt.isFinite || dt <= 0) return false;
+    if (!turnMode.isSnap) {
+      _snapTurnArmed = true;
+      applyHomeLookRotation(rig, x, y, dt);
+      return false;
+    }
+    final step = min(dt, 0.1);
+    // Vertical pitch remains smooth even when horizontal yaw uses Snap Turn.
+    final pitchDelta = VrStickLook.pitchDelta(y, step);
+    if (pitchDelta != 0.0) {
+      rig.bodyPitch = (rig.bodyPitch + pitchDelta).clamp(-1.45, 1.45);
+    }
+    final absX = x.abs();
+    if (absX <= 0.25) {
+      _snapTurnArmed = true;
+      return false;
+    }
+    if (_snapTurnArmed && absX >= 0.62) {
+      _snapTurnArmed = false;
+      final rad = turnMode.snapDegrees * (pi / 180.0);
+      rig.rotate(x > 0 ? -rad : rad, 0);
+      HapticFeedback.selectionClick();
+      return true;
+    }
+    return false;
+  }
 
   /// Current intended ground speed, including analog deflection, in m/s.
   /// Zero when neutral, suspended or blocked by a wall.

@@ -540,6 +540,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   VrHomeNpcDescriptor? _nativeTalkingNpc;
   String? _focusedNpcId;
   int _npcPromptCycleIndex = 0;
+  final ValueNotifier<String?> _contextualActionPrompt = ValueNotifier<String?>(
+    null,
+  );
   Listenable? _npcChanges;
   Timer? _npcRefreshTimer;
   bool _npcPanelBuilding = false;
@@ -2222,6 +2225,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _assistantRefreshTimer?.cancel();
     _assistantSession++;
     _npcChanges?.removeListener(_npcStateChanged);
+    _contextualActionPrompt.dispose();
     _npcRefreshTimer?.cancel();
     _npcSession++;
     _npcGeneration++;
@@ -2363,7 +2367,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           turnRate.abs() > 0.015 ||
           pitchRate.abs() > VrStickLook.verticalDeadZone;
       if (manualLook) {
-        applyHomeLookRotation(_rig, turnRate, pitchRate, frameDt);
+        _locomotion.applyStickLook(
+          _rig,
+          turnRate,
+          pitchRate,
+          frameDt,
+          turnMode: VrGraphicsComfortSettings.instance.turnMode,
+        );
+      } else {
+        _locomotion.resetSnapTurnLatch();
       }
       if (!_hasWorldModal && (!_isRemoteConnected || !state.isNeutralized)) {
         if (_isRemoteConnected && state.btnA) {
@@ -2436,6 +2448,27 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           setState(() => _statusMessage = hint);
         }
       }
+    }
+    // Lightweight contextual action prompt (Apple visionOS / Switch style):
+    // updates a dedicated ValueNotifier with zero full-widget rebuilds.
+    String? nextPrompt;
+    if (!_hasWorldModal && _hudHidden) {
+      if (focusedNpcNow != null) {
+        nextPrompt = 'X Voz · Y Charlar · ${focusedNpcNow.displayName}';
+      } else if (_hoveredPedestal != null) {
+        nextPrompt = 'A · Abrir ${_hoveredPedestal!.title}';
+      } else {
+        final activeRoom = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
+        if (activeRoom != null &&
+            _expandedEcosystemRooms.any((r) => r.id == activeRoom.id)) {
+          nextPrompt = 'A · Entrar a ${activeRoom.title}';
+        } else if (_hoveredWaypoint != null) {
+          nextPrompt = 'A · Ir a ${_hoveredWaypoint!.name}';
+        }
+      }
+    }
+    if (_contextualActionPrompt.value != nextPrompt) {
+      _contextualActionPrompt.value = nextPrompt;
     }
     // Release native talking lock gracefully if the player walks away (> 5.6m).
     final nativeTalking = _nativeTalkingNpc;
@@ -3894,6 +3927,56 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                   _hudHidden &&
                   _bindings.statusOverlayBuilder != null)
                 _bindings.statusOverlayBuilder!(context),
+
+              // 2b. Discreet visionOS / Switch-style contextual action pill.
+              if (_homeSurfaceActive && _hudHidden && !_hasWorldModal)
+                IgnorePointer(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: _contextualActionPrompt,
+                    builder: (context, prompt, _) {
+                      if (prompt == null || prompt.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return StereoHudOverlay(
+                        alignment: Alignment.bottomCenter,
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Container(
+                          key: const ValueKey('vr_contextual_action_pill'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xCC091224),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: widget.theme.accent.withValues(alpha: 0.72),
+                              width: 1.15,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x66000000),
+                                blurRadius: 12,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            prompt,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFF8FAFC),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
 
               if (_homeSurfaceActive &&
                   !_hudHidden &&
