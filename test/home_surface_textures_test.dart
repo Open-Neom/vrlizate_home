@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vrlizate_home/src/spatial/home_lobby_layout.dart';
 import 'package:vrlizate_home/src/spatial/home_surface_texture_data.dart';
 import 'package:vrlizate_home/src/spatial/home_surface_textures.dart';
+import 'package:vrlizate_scene/vrlizate_scene.dart' show VrQualityTier;
 
 void main() {
   group('HomeSurfaceTextureData & HomeSurfaceTextures', () {
@@ -75,6 +76,22 @@ void main() {
           expect(meanRough, greaterThan(0.55));
         }
       }
+    });
+
+    test('scales procedural lobby resolution to 512px on high/ultra tiers', () {
+      expect(HomeSurfaceTextures.resolutionForTier(VrQualityTier.low), 256);
+      expect(HomeSurfaceTextures.resolutionForTier(VrQualityTier.medium), 256);
+      expect(HomeSurfaceTextures.resolutionForTier(VrQualityTier.high), 512);
+      expect(HomeSurfaceTextures.resolutionForTier(VrQualityTier.ultra), 512);
+
+      final hd = HomeSurfaceTextureData.generate(
+        HomeSurface.limestone,
+        resolution: 512,
+      );
+      expect(hd.size, 512);
+      expect(hd.color.length, 512 * 512 * 4);
+      expect(hd.normal.length, 512 * 512 * 4);
+      expect(hd.roughness.length, 512 * 512 * 4);
     });
   });
 }

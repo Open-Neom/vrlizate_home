@@ -29,8 +29,11 @@ class HomeSurfaceTextureData {
   /// - Channel G: perceptual roughness (`0..255`)
   /// - Channel B: metalness (`0..255`)
   /// - Channel A: `255`
-  static HomeSurfaceTextureData generate(HomeSurface surface) {
-    const size = resolution;
+  static HomeSurfaceTextureData generate(
+    HomeSurface surface, {
+    int resolution = HomeSurfaceTextureData.resolution,
+  }) {
+    final size = resolution.clamp(64, 1024);
     final heights = Float32List(size * size);
     final color = Uint8List(size * size * 4);
     final normal = Uint8List(color.length);
@@ -129,12 +132,13 @@ class HomeSurfaceTextureData {
         roughness[p + 3] = 255;
       }
     }
+    final slopeGain = 2.4 * (size / 256.0);
     for (var y = 0; y < size; y++) {
       for (var x = 0; x < size; x++) {
         double h(int dx, int dy) =>
             heights[((y + dy) % size) * size + (x + dx) % size];
-        final nx = (h(-1, 0) - h(1, 0)) * 2.4;
-        final ny = (h(0, -1) - h(0, 1)) * 2.4;
+        final nx = (h(-1, 0) - h(1, 0)) * slopeGain;
+        final ny = (h(0, -1) - h(0, 1)) * slopeGain;
         final length = math.sqrt(nx * nx + ny * ny + 1);
         final p = (y * size + x) * 4;
         normal[p] = ((nx / length * .5 + .5) * 255).round();
@@ -148,7 +152,7 @@ class HomeSurfaceTextureData {
       ormRgba: roughness,
       width: size,
       height: size,
-      strength: 0.45,
+      strength: 0.48,
     );
     return HomeSurfaceTextureData(size, color, normal, filteredOrm);
   }

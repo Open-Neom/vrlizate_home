@@ -2083,6 +2083,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
             enableShadows,
             shadowMapResolution: g.targetPreset!.shadowMapResolution,
             bakedArchitecture: g.targetPreset!.tier == VrQualityTier.low,
+            qualityTier: g.targetPreset!.tier,
           );
           setState(() => _qualityPreset = g.targetPreset!);
         }
@@ -2742,6 +2743,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         enableShadows,
         shadowMapResolution: _qualityPreset.shadowMapResolution,
         bakedArchitecture: _qualityPreset.tier == VrQualityTier.low,
+        qualityTier: _qualityPreset.tier,
       );
       HapticFeedback.selectionClick();
     });
@@ -3904,6 +3906,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
                           enableShadows,
                           shadowMapResolution: preset.shadowMapResolution,
                           bakedArchitecture: preset.tier == VrQualityTier.low,
+                          qualityTier: preset.tier,
                         );
                         setState(() => _qualityPreset = preset);
                       }

@@ -10,6 +10,7 @@ import 'package:vrlizate_scene/vrlizate_scene.dart'
     show
         VrLook,
         VrPeerAvatarStage,
+        VrQualityTier,
         VrTextBitmap,
         VrTextLabel,
         VrTextRaster;
@@ -199,6 +200,7 @@ class VirtualHomeWorldBuilder {
   /// Diagnostic/authoring hosts can wait for finishes before capturing a view.
   Future<void> get materialsReady => _materialsReady;
   bool _bakedArchitecture = true;
+  VrQualityTier? _textureTier;
   int _generation = 0;
 
   HomeExhibit? exhibitFor(Node? node) => _exhibits[node];
@@ -260,6 +262,7 @@ class VirtualHomeWorldBuilder {
     bool enabled, {
     int? shadowMapResolution,
     bool? bakedArchitecture,
+    VrQualityTier? qualityTier,
   }) {
     final sun = _sunLight;
     if (sun == null) return;
@@ -268,7 +271,15 @@ class VirtualHomeWorldBuilder {
       sun.shadowMapResolution = shadowMapResolution;
     }
     final baked = bakedArchitecture ?? !enabled;
-    if (_bakedArchitecture != baked) {
+    final prevRes = _textureTier != null
+        ? HomeSurfaceTextures.resolutionForTier(_textureTier!)
+        : null;
+    final nextRes = qualityTier != null
+        ? HomeSurfaceTextures.resolutionForTier(qualityTier)
+        : prevRes;
+    final resChanged = qualityTier != null && nextRes != prevRes;
+    if (qualityTier != null) _textureTier = qualityTier;
+    if (_bakedArchitecture != baked || resChanged) {
       _bakedArchitecture = baked;
       for (final architecture in _architecture) {
         architecture.apply(baked: baked);
@@ -520,6 +531,7 @@ class VirtualHomeWorldBuilder {
           pbr: architecture.pbrMaterial,
           baked: architecture.bakedMaterial,
           details: !_bakedArchitecture,
+          qualityTier: _textureTier,
           isCurrent: () => generation == _generation,
         );
       } catch (error) {
