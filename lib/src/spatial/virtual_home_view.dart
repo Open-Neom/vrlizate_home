@@ -200,10 +200,10 @@ Future<VrWorldActionPanel3D> createVrHomeAssistantPanel({
         : null,
     actions: actions,
     columns: actions.length > 1 ? 2 : 1,
-    width: 2.0,
-    buttonHeight: .18,
-    actionSpacing: .045,
-    columnSpacing: .07,
+    width: 1.48,
+    buttonHeight: .14,
+    actionSpacing: .034,
+    columnSpacing: .056,
     accentColor: theme.accent,
     meshBuilder: meshBuilder,
     textNodeBuilder: textNodeBuilder,
@@ -292,10 +292,10 @@ Future<VrWorldActionPanel3D> createVrHomeOptionsPanel({
     description: VrHomeTranslationConstants.optionsPanelDescription,
     actions: actions,
     columns: 2,
-    width: 2.1,
-    buttonHeight: .18,
-    actionSpacing: .045,
-    columnSpacing: .07,
+    width: 1.50,
+    buttonHeight: .14,
+    actionSpacing: .034,
+    columnSpacing: .056,
     accentColor: theme.accent,
     meshBuilder: meshBuilder,
     textNodeBuilder: textNodeBuilder,
@@ -414,10 +414,10 @@ Future<VrWorldActionPanel3D> createVrHomeNpcDialoguePanel({
     ),
     actions: actions,
     columns: 2,
-    width: 2.05,
-    buttonHeight: .175,
-    actionSpacing: .042,
-    columnSpacing: .068,
+    width: 1.48,
+    buttonHeight: .14,
+    actionSpacing: .034,
+    columnSpacing: .056,
     accentColor: theme.accent,
     meshBuilder: meshBuilder,
     textNodeBuilder: textNodeBuilder,
@@ -2680,7 +2680,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     final placement = _walkSpace.placePanel(
       eye: _rig.eyeCenter,
       forward: _rig.forward,
-      distance: HomeSpatialMetrics.modalDistance,
+      distance: HomeSpatialMetrics.communicationDistance,
+      width: 1.56,
     );
     if (placement == null && mounted) {
       setState(
@@ -2947,7 +2948,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     final placement = _walkSpace.placePanel(
       eye: _rig.eyeCenter,
       forward: _rig.forward,
-      distance: HomeSpatialMetrics.modalDistance,
+      distance: HomeSpatialMetrics.communicationDistance,
+      width: 1.56,
     );
     _optionsPose = placement != null
         ? VrWorldPose.fromViewer(
@@ -2958,7 +2960,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         : VrWorldPose.fromViewer(
             eye: _rig.eyeCenter.clone(),
             forward: _rig.forward,
-            distance: HomeSpatialMetrics.modalDistance,
+            distance: HomeSpatialMetrics.communicationDistance,
           );
     _locomotion.suspendSmoothLocomotion();
     _optionsPanel?.removeFrom(_scene);
@@ -3027,7 +3029,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         _optionsPose = VrWorldPose.fromViewer(
           eye: _rig.eyeCenter.clone(),
           forward: _rig.forward,
-          distance: HomeSpatialMetrics.modalDistance,
+          distance: HomeSpatialMetrics.communicationDistance,
         );
         unawaited(_rebuildOptionsPanel());
       case 'rooms':
@@ -3423,11 +3425,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         ? toNpc.normalized()
         : _rig.forward.clone();
     final npcDist = toNpc.length;
-    final desiredDist = (npcDist - 0.55).clamp(1.45, HomeSpatialMetrics.modalDistance);
+    final desiredDist = (npcDist - 0.35).clamp(
+      2.65,
+      HomeSpatialMetrics.communicationDistance,
+    );
     final placement = _walkSpace.placePanel(
       eye: _rig.eyeCenter,
       forward: aimForward,
       distance: desiredDist,
+      width: 1.56,
     );
     _npcPose = placement != null
         ? VrWorldPose.fromViewer(

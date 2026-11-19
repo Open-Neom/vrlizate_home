@@ -134,7 +134,7 @@ class DemoPreviewWorldPanel {
   final Map<Node, int> _actionByNode = Map<Node, int>.identity();
   final VrControlRegistry _registry = VrControlRegistry();
 
-  static const List<double> _labelY = [0.42, 0.25, 0.07, -0.13, -0.32, -0.60];
+  static const List<double> _labelY = [0.33, 0.20, 0.05, -0.10, -0.25, -0.47];
 
   int _focusedIndex = 0;
   int? _lastHoveredIndex;
@@ -174,7 +174,7 @@ class DemoPreviewWorldPanel {
             mesh:
                 meshBuilder?.call() ??
                 Mesh(
-                  CuboidGeometry(vm.Vector3(1.78, 1.40, 0.055)),
+                  CuboidGeometry(vm.Vector3(1.38, 1.10, 0.05)),
                   plateMaterial,
                 ),
           )
@@ -184,33 +184,33 @@ class DemoPreviewWorldPanel {
     final enterButton = VrButton3D(
       name: enterNodeName,
       label: 'Entrar al demo',
-      center: pose.localToWorld(0, -0.32, 0.055),
+      center: pose.localToWorld(0, -0.25, 0.05),
       color: accent,
-      width: 1.50,
-      height: 0.26,
+      width: 1.16,
+      height: 0.20,
       onPressed: onEnter,
       meshBuilder: meshBuilder,
     );
-    enterButton.nodes.first.localTransform = pose.transformAt(0, -0.32, 0.055);
+    enterButton.nodes.first.localTransform = pose.transformAt(0, -0.25, 0.05);
 
     final backButton = VrButton3D(
       name: backNodeName,
       label: 'Volver al Home / Ocultar',
-      center: pose.localToWorld(0, -0.60, 0.055),
+      center: pose.localToWorld(0, -0.47, 0.05),
       color: vm.Vector4(0.32, 0.38, 0.48, 1),
-      width: 1.50,
-      height: 0.24,
+      width: 1.16,
+      height: 0.18,
       onPressed: onBack,
       meshBuilder: meshBuilder,
     );
-    backButton.nodes.first.localTransform = pose.transformAt(0, -0.60, 0.055);
+    backButton.nodes.first.localTransform = pose.transformAt(0, -0.47, 0.05);
 
     final labels = await Future.wait([
       _label(
         data.title.toUpperCase(),
         pose: pose,
-        y: 0.42,
-        height: 0.115,
+        y: 0.33,
+        height: 0.09,
         color: data.color,
         weight: FontWeight.w800,
         textNodeBuilder: textNodeBuilder,
@@ -218,34 +218,34 @@ class DemoPreviewWorldPanel {
       _label(
         '${data.category}  ·  ${data.subtitle}',
         pose: pose,
-        y: 0.25,
-        height: 0.068,
+        y: 0.20,
+        height: 0.056,
         color: const Color(0xFFCBD5E1),
         textNodeBuilder: textNodeBuilder,
       ),
       _label(
         data.description,
         pose: pose,
-        y: 0.07,
-        height: 0.15,
+        y: 0.05,
+        height: 0.12,
         color: const Color(0xFFE2E8F0),
         maxLines: 2,
-        maxWidthPx: 1350,
+        maxWidthPx: 1200,
         textNodeBuilder: textNodeBuilder,
       ),
       _label(
         '${data.controls}  ·  ESTÉREO 3D',
         pose: pose,
-        y: -0.13,
-        height: 0.06,
+        y: -0.10,
+        height: 0.05,
         color: const Color(0xFF94A3B8),
         textNodeBuilder: textNodeBuilder,
       ),
       _label(
         'ENTRAR AL DEMO',
         pose: pose,
-        y: -0.32,
-        height: 0.085,
+        y: -0.25,
+        height: 0.068,
         color: Colors.white,
         weight: FontWeight.w800,
         name: enterNodeName,
@@ -254,8 +254,8 @@ class DemoPreviewWorldPanel {
       _label(
         '✕  OCULTAR / VOLVER AL HOME',
         pose: pose,
-        y: -0.60,
-        height: 0.072,
+        y: -0.47,
+        height: 0.058,
         color: Colors.white,
         weight: FontWeight.w700,
         name: backNodeName,
@@ -318,8 +318,8 @@ class DemoPreviewWorldPanel {
   void reanchor(DemoPreviewWorldPose nextPose) {
     pose = nextPose;
     _plate.localTransform = pose.transformAt(0, -0.03, 0);
-    _enterButton.nodes.first.localTransform = pose.transformAt(0, -0.32, 0.055);
-    _backButton.nodes.first.localTransform = pose.transformAt(0, -0.60, 0.055);
+    _enterButton.nodes.first.localTransform = pose.transformAt(0, -0.25, 0.05);
+    _backButton.nodes.first.localTransform = pose.transformAt(0, -0.47, 0.05);
     for (var i = 0; i < _labels.length; i++) {
       _labels[i].localTransform = pose.transformAt(0, _labelY[i], 0.09)
         ..rotateX(math.pi / 2)

@@ -73,10 +73,10 @@ Future<VrWorldActionPanel3D> createVrHomeRoomPanel({
             ? 'Preparando el contenido de esta sala.'
             : presentation?.description ?? room.description),
     accentColor: Color(room.accent),
-    width: 1.78,
+    width: 1.38,
     columns: actions.length > 1 ? 2 : 1,
-    buttonHeight: .18,
-    actionSpacing: .055,
+    buttonHeight: .14,
+    actionSpacing: .036,
     actions: actions,
     content: !busy && error == null && presentation != null && content != null
         ? VrWidgetSurface3D(
