@@ -240,5 +240,98 @@ void main() {
       expect(first.pose.leftArmFlexion + first.pose.rightArmFlexion, greaterThan(0.1));
       crowd.dispose();
     });
+
+    test('NPCs communicate in alternating turns, roam different wings, and trigger spontaneous chats', () {
+      final layout = HomeEcosystemLayout(
+        VrHomeEcosystemRoom.defaults,
+        topology: HomePlazaTopology.distributedCruciform,
+      );
+      final crowd = HomePlazaCrowd.plan(
+        layout: layout,
+        plazaBannerText: 'GRAN PLAZA CENTRAL · VRLIZATE',
+      );
+
+      // 1) Visitors are distributed across multiple plaza zones (not bunched in 1 spot).
+      var minX = double.infinity, maxX = -double.infinity;
+      var minZ = double.infinity, maxZ = -double.infinity;
+      for (final v in crowd.visitors) {
+        if (v.x < minX) minX = v.x;
+        if (v.x > maxX) maxX = v.x;
+        if (v.z < minZ) minZ = v.z;
+        if (v.z > maxZ) maxZ = v.z;
+      }
+      expect(maxX - minX, greaterThan(10.0));
+      expect(maxZ - minZ, greaterThan(15.0));
+
+      // 2) Active NPC-to-NPC conversations run immediately with alternating speakers.
+      expect(crowd.activeNpcConversationCount, greaterThanOrEqualTo(2));
+      final socialA = crowd.visitorById('plaza_social_0_a')!;
+      final socialB = crowd.visitorById('plaza_social_0_b')!;
+      final initialA = vm.Vector3(socialA.x, 0, socialA.z);
+      expect(socialA.isChattingWithNpc, isTrue);
+      expect(socialA.chatPartnerId, socialB.id);
+      expect(socialA.isChatSpeaker, isTrue);
+      expect(socialA.activeChatLine, isNotNull);
+
+      // Overheard ambient speaker query finds the active speaker in front of viewer.
+      final overheard = crowd.findNearbyConversingSpeaker(
+        vm.Vector3(socialA.x, 1.6, socialA.z + 5.0),
+        vm.Vector3(0, 0, -1),
+      );
+      expect(overheard?.id, socialA.id);
+
+      // Advance 3.0 s -> speaking turn swaps from socialA to socialB!
+      for (var step = 1; step <= 36; step++) {
+        crowd.tick(step / 12.0);
+      }
+      expect(socialB.isChatSpeaker, isTrue);
+      expect(socialB.activeChatLine, isNotNull);
+
+      // Advance another 14 s -> socialA & socialB finish chatting, wave goodbye,
+      // and walk off to explore other zones of the plaza!
+      for (var step = 37; step <= 210; step++) {
+        crowd.tick(step / 12.0);
+      }
+      final movedA =
+          (socialA.x - initialA.x).abs() + (socialA.z - initialA.z).abs();
+      expect(movedA, greaterThan(0.8));
+
+      // 3) Two strollers crossing within 2.55 m spontaneously start a new chat!
+      final strollers = crowd.visitors
+          .where((v) => !v.conversationalist && !v.isChattingWithNpc)
+          .take(2)
+          .toList();
+      expect(strollers.length, 2);
+      strollers[0]
+        ..x = 4.0
+        ..z = 22.0
+        ..chatCooldownSeconds = 0.0
+        ..pauseRemaining = 0.0;
+      strollers[1]
+        ..x = 5.4
+        ..z = 22.0
+        ..chatCooldownSeconds = 0.0
+        ..pauseRemaining = 0.0;
+      crowd.tick(211 / 12.0);
+      expect(strollers[0].isChattingWithNpc, isTrue);
+      expect(strollers[0].chatPartnerId, strollers[1].id);
+      expect(strollers[1].chatPartnerId, strollers[0].id);
+
+      // 4) Strolling visitors walk with real leg swing & subtle torso twist (not rigid).
+      final walker = crowd.visitors.firstWhere(
+        (v) => !v.isChattingWithNpc && v.pauseRemaining <= 0 && v.walkSpeed > 0,
+      );
+      var sawLegSwing = false;
+      for (var step = 212; step <= 224; step++) {
+        crowd.tick(step / 12.0);
+        if (walker.pose.leftLegSwing.abs() > 0.1 ||
+            walker.pose.rightLegSwing.abs() > 0.1) {
+          sawLegSwing = true;
+          break;
+        }
+      }
+      expect(sawLegSwing, isTrue);
+      crowd.dispose();
+    });
   });
 }
