@@ -175,6 +175,21 @@ class VrHomeEcosystemRoom {
     terminalActionLabel: 'A · Probar tu dominio web aquí',
   );
 
+  /// Opt-in 1D/2D/3D stereoscopic PDF reading sanctuary with local PDF import,
+  /// open-access public library, EMXI granted books, Read-Aloud TTS, SAIA Q&A,
+  /// and Estación Faro HTTP 206 PC PDF Vault streaming.
+  static const pdfReadingRoom = VrHomeEcosystemRoom(
+    id: 'pdf_reading_vr',
+    title: 'Biblioteca PDF · Lectura VR',
+    description:
+        'Lee cualquier PDF en 1D vectorial, 2D atril estereoscópico o 3D con Bóveda PC Faro, TTS y resúmenes SAIA.',
+    accent: 0xFF38BDF8,
+    icon: VrHomeRoomIcon.book,
+    purpose: VrHomeRoomPurpose.reading,
+    doorBadge: 'PDF 1D/2D/3D · TTS + SAIA',
+    terminalActionLabel: 'A · Entrar a Sala de Lectura PDF',
+  );
+
   static const defaults = <VrHomeEcosystemRoom>[
     VrHomeEcosystemRoom(
       id: 'profile',
