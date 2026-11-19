@@ -1932,6 +1932,61 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     }
     if (focusedNpc != null) {
       _openNpcPanel(focusedNpc);
+      return;
+    }
+    // When standing inside any experience space/room, pressing A enters its
+    // experience directly without needing pixel-precise aim at the terminal.
+    final currentSpace = _ecosystemRoomForCurrentSpace();
+    if (currentSpace != null) {
+      _bindings.onSound?.call(VrHomeSound.open);
+      unawaited(_enterRoomSpaceDirectly(currentSpace));
+    }
+  }
+
+  VrHomeEcosystemRoom? _ecosystemRoomForCurrentSpace() {
+    final current = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
+    if (current == null) return null;
+    for (final candidate in _expandedEcosystemRooms) {
+      if (candidate.id == current.id) return candidate;
+    }
+    return null;
+  }
+
+  static bool _isDirectEntryRoomAction(String actionId) =>
+      actionId == 'enter' ||
+      actionId == 'preview_domain' ||
+      actionId == 'tour_malls' ||
+      actionId == 'import_vrlz' ||
+      actionId == 'live_epg' ||
+      actionId == 'open_cinema' ||
+      actionId.startsWith('enter_') ||
+      actionId.startsWith('launch_') ||
+      actionId.startsWith('mall_');
+
+  Future<void> _enterRoomSpaceDirectly(VrHomeEcosystemRoom room) async {
+    if (!mounted || !_foreground || _isEnteringDemo || _isDemoActive) return;
+    final routeId = room.targetRouteId?.trim();
+    if (routeId != null && routeId.isNotEmpty) {
+      _openDemoById(routeId, room.title);
+      return;
+    }
+    final onRoomAction = _bindings.onRoomAction;
+    if (onRoomAction != null) {
+      try {
+        final presentation = await onRoomAction(room, null);
+        if (!mounted || _isDemoActive || _isEnteringDemo) return;
+        for (final action in presentation.actions) {
+          if (action.enabled && _isDirectEntryRoomAction(action.id)) {
+            await onRoomAction(room, action.id);
+            return;
+          }
+        }
+      } catch (_) {
+        // Fall through to the standard room panel below.
+      }
+    }
+    if (mounted && !_isDemoActive && !_isEnteringDemo) {
+      await _openEcosystemRoom(room);
     }
   }
 
@@ -2324,10 +2379,14 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         // viewer height. Only the visor's own pose may translate its eyes.
         final room = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
         if (room != null && room.title != _currentZoneName) {
+          final isDirectSpace = _expandedEcosystemRooms.any(
+            (candidate) => candidate.id == room.id,
+          );
           setState(() {
             _currentZoneName = room.title;
-            _statusMessage =
-                '${room.title} · Apunta a una exhibición y pulsa A';
+            _statusMessage = isDirectSpace
+                ? '${room.title} · Pulsa A para entrar directo a la experiencia'
+                : '${room.title} · Apunta a una exhibición y pulsa A';
           });
         }
       } else {
