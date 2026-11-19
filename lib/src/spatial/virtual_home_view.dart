@@ -487,10 +487,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   late final VrInputArbiter _arbiter;
   late final VrGamepadDriver _gamepadDriver;
   bool _remotePrimaryDown = false;
+  double _remoteAHoldSeconds = 0.0;
   bool _remoteBackDown = false;
   bool _remoteXDown = false, _remoteYDown = false;
   bool _remoteMenuDown = false, _remoteOptionsDown = false;
   bool _remoteJumpDown = false;
+  bool _remoteLrChordLatched = false;
   bool _libraryHiddenByUser = false;
   bool _modalLaserTriggerQueued = false;
   Node? _modalLaserTarget;
@@ -576,7 +578,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   String _currentZoneName = 'Biblioteca';
   double _time = 0.0;
   String _statusMessage =
-      'Izq.: caminar · ZL: Turbo (correr) · ZR: Saltar · Der.: mirar · A: elegir';
+      'A: Aceptar / sostener=Turbo · B: Atrás / Saltar · X: WordSphere · Y: Menú · L+R: VRlizate';
   // Open in touch-only preparation; hiding controls enters headset interaction.
   bool _hudHidden = false;
 
@@ -589,22 +591,20 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _npcPanel != null;
 
   static const _navigationControllerActions = {
-    'A': 'Seleccionar',
-    'B': 'Detener',
-    'X': 'Categoría −',
-    'Y': 'Categoría +',
-    'L': VrHomeTranslationConstants.controllerMenuActionLabel,
-    'R': VrHomeTranslationConstants.optionsDockLabel,
-    'ZL': 'Turbo',
-    'ZR': 'Saltar',
+    'A': 'OK/Turbo',
+    'B': 'Atr/Salt',
+    'X': 'WordSphr',
+    'Y': 'Menú',
+    'L': '+R Sys',
+    'R': '+L Sys',
   };
   static const _modalControllerActions = {
-    'A': 'Seleccionar',
+    'A': 'Aceptar',
     'B': 'Cerrar',
-    'X': 'Sin acción',
-    'Y': 'Sin acción',
-    'L': VrHomeTranslationConstants.controllerMenuActionLabel,
-    'R': VrHomeTranslationConstants.optionsDockLabel,
+    'X': 'WordSphr',
+    'Y': 'Menú',
+    'L': '+R Sys',
+    'R': '+L Sys',
   };
 
   @override
@@ -1152,22 +1152,40 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   }
 
   void _handleBackAction() {
-    // B cancels the current interaction in place. Returning to the plaza's
-    // entrance must never be an accidental side effect of braking or closing
-    // a room panel, regardless of which controller sent the button.
+    // B steps back one layer at a time:
+    // 1) Active teleport flight -> cancel safely.
+    // 2) Top world modal (catalog item / room / options / assistant / NPC) -> close that layer.
+    // 3) Main Menu (library) open -> hide the Main Menu.
+    // 4) Nothing open to cancel or go back from -> Jump!
     _demoAfterJump = null;
-    _cancelJumpSafely();
     _modalLaserTriggerQueued = false;
     _modalLaserTarget = null;
+    if (_locomotion.isJumping) {
+      _cancelJumpSafely();
+      HapticFeedback.selectionClick();
+      setState(
+        () => _statusMessage =
+            'Recorrido detenido · Suelta el stick para volver a caminar',
+      );
+      return;
+    }
     if (_hasWorldModal) {
       _dismissWorldModal();
       return;
     }
-    HapticFeedback.selectionClick();
-    setState(
-      () => _statusMessage =
-          'Recorrido detenido · Suelta el stick para volver a caminar',
-    );
+    if (_isLibraryInFrontOfViewer() && !_libraryHiddenByUser) {
+      _libraryHiddenByUser = true;
+      _library?.root.visible = false;
+      HapticFeedback.selectionClick();
+      setState(() {
+        _statusMessage = VrHomeTranslationConstants.mainMenuHiddenStatus;
+      });
+      return;
+    }
+    if (_locomotion.triggerHop()) {
+      HapticFeedback.lightImpact();
+      _bindings.onSound?.call(VrHomeSound.hover);
+    }
   }
 
   void _rememberWalkablePosition() {
@@ -1260,6 +1278,25 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _subscriptions.add(
         peerRemovals.listen((peerId) {
           _worldBuilder.peerStage?.removePeer(peerId);
+        }),
+      );
+    }
+    final avatarBubbles = _bindings.avatarBubbles;
+    if (avatarBubbles != null) {
+      _subscriptions.add(
+        avatarBubbles.listen((bubble) {
+          if (!mounted) return;
+          final badge = bubble.isThought ? '💭' : '💬';
+          if (!bubble.isThought) {
+            // Nearby visitors notice spoken avatar messages!
+            _worldBuilder.reactCrowdToEvent(
+              vm.Vector3(_rig.eyeCenter.x, 1.5, _rig.eyeCenter.z),
+              reactionComment: '«${bubble.text}»',
+            );
+          }
+          setState(() {
+            _statusMessage = '$badge ${bubble.authorName}: «${bubble.text}»';
+          });
         }),
       );
     }
@@ -1394,27 +1431,55 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
         final backPressed = state.btnB || state.isActionPressed;
         final primaryPressed = state.btnA;
+        final lrChord =
+            (state.btnL && state.btnR) || (state.btnZL && state.btnZR);
         final menuPressed = state.btnL || state.stickClick;
         final optionsPressed = state.btnR;
-        if (menuPressed && !_remoteMenuDown) {
-          _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
+
+        if (lrChord) {
+          // L + R simultaneously belongs exclusively to the VRlizate general
+          // system menu (handled globally by VrSubtleQuickMenuController).
+          _remoteLrChordLatched = true;
+        } else if (!menuPressed && !optionsPressed && !state.btnZL && !state.btnZR) {
+          _remoteLrChordLatched = false;
         }
-        if (optionsPressed && !_remoteOptionsDown) {
-          if (_optionsOpen) {
-            _dismissOptionsPanel();
-          } else {
-            _showOptionsPanel();
+
+        if (!_remoteLrChordLatched) {
+          if (menuPressed && !_remoteMenuDown) {
+            if (_isLibraryInFrontOfViewer() && !_hasWorldModal) {
+              _cycleLibraryCategory(-1);
+            } else {
+              _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
+            }
+          }
+          if (optionsPressed && !_remoteOptionsDown) {
+            if (_isLibraryInFrontOfViewer() && !_hasWorldModal) {
+              _cycleLibraryCategory(1);
+            } else if (_optionsOpen) {
+              _dismissOptionsPanel();
+            } else {
+              _showOptionsPanel();
+            }
           }
         }
         _remoteMenuDown = menuPressed;
         _remoteOptionsDown = optionsPressed;
-        if (!_hasWorldModal) {
-          if (state.btnX && !_remoteXDown) _cycleLibraryCategory(-1);
-          if (state.btnY && !_remoteYDown) _cycleLibraryCategory(1);
-          if (state.btnZR && !_remoteJumpDown) {
-            if (_locomotion.triggerHop()) {
-              _bindings.onSound?.call(VrHomeSound.hover);
-            }
+
+        // Y = Mostrar / ocultar el Menú principal de la experiencia.
+        if (state.btnY && !_remoteYDown && !lrChord) {
+          _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
+        }
+        // X = Mostrar WordSphere para escribir un mensaje (hablado/pensado) en el avatar.
+        if (state.btnX && !_remoteXDown && !lrChord) {
+          if (_bindings.onOpenAvatarWordsphere != null) {
+            _bindings.onOpenAvatarWordsphere!();
+          } else if (!_hasWorldModal) {
+            _cycleLibraryCategory(-1);
+          }
+        }
+        if (!_hasWorldModal && state.btnZR && !_remoteJumpDown && !lrChord) {
+          if (_locomotion.triggerHop()) {
+            _bindings.onSound?.call(VrHomeSound.hover);
           }
         }
         _remoteXDown = state.btnX;
@@ -1523,12 +1588,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   void _seedHeldRemoteButtons() {
     final state = _remoteController.latestState;
     _remotePrimaryDown = state.btnA;
+    _remoteAHoldSeconds = 0.0;
     _remoteBackDown = state.btnB || state.isActionPressed;
     _remoteXDown = state.btnX;
     _remoteYDown = state.btnY;
     _remoteMenuDown = state.btnL || state.stickClick;
     _remoteOptionsDown = state.btnR;
     _remoteJumpDown = state.btnZR;
+    _remoteLrChordLatched =
+        (state.btnL && state.btnR) || (state.btnZL && state.btnZR);
     _remoteLaserMode =
         _isRemoteConnected && VrHomeRemotePointer.isPointing(state);
     _remoteLaserHitsTarget = false;
@@ -2219,7 +2287,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         applyHomeLookRotation(_rig, turnRate, pitchRate, frameDt);
       }
       if (!_hasWorldModal && (!_isRemoteConnected || !state.isNeutralized)) {
-        final turboHeld = _isRemoteConnected && state.btnZL;
+        if (_isRemoteConnected && state.btnA) {
+          _remoteAHoldSeconds = (_remoteAHoldSeconds + frameDt).clamp(0.0, 10.0);
+        } else {
+          _remoteAHoldSeconds = 0.0;
+        }
+        final movingStick =
+            state.stickX.abs() > 0.12 || state.stickY.abs() > 0.12;
+        final holdATurbo = _remoteAHoldSeconds >= 0.22 && movingStick;
+        final turboHeld = _isRemoteConnected && (state.btnZL || holdATurbo);
         _rig.eyeCenter = _locomotion.applySmoothRigLocomotion(
           rig: _rig,
           stickX: _isRemoteConnected ? state.stickX : _gamepadMotion.moveX,

@@ -104,6 +104,23 @@ class VrHomeNpcDescriptor {
   final String? plazaBanner;
 }
 
+/// Pure-SDK avatar speech/thought bubble projected by the player via WordSphere
+/// so nearby plaza visitors and multiplayer peers can see what the user spoke
+/// (`isThought: false`) or thought (`isThought: true`).
+class VrHomeAvatarBubble {
+  const VrHomeAvatarBubble({
+    required this.text,
+    this.isThought = false,
+    this.authorName = 'Tú',
+    this.duration = const Duration(seconds: 9),
+  });
+
+  final String text;
+  final bool isThought;
+  final String authorName;
+  final Duration duration;
+}
+
 typedef VrHomePreviewResolver =
     DemoPreviewData Function({
       required String demoId,
@@ -139,6 +156,8 @@ class VrHomeSpatialBindings {
     this.onSuspend,
     this.onSound,
     this.onVisitorGreeted,
+    this.onOpenAvatarWordsphere,
+    this.avatarBubbles,
     this.peerSnapshots,
     this.peerRemovals,
     this.guidance,
@@ -234,6 +253,13 @@ class VrHomeSpatialBindings {
   final void Function(VrHomeSound)? onSound;
   final void Function(vm.Vector3 visitorPosition, StereoHeadRig rig)?
   onVisitorGreeted;
+
+  /// Optional host callback invoked when the player presses `X` to open
+  /// WordSphere and write a spoken/thought message shown on their avatar.
+  final VoidCallback? onOpenAvatarWordsphere;
+
+  /// Optional stream of spoken/thought avatar messages projected by the player.
+  final Stream<VrHomeAvatarBubble>? avatarBubbles;
 
   /// Optional 10–20 Hz remote multiplayer user avatar snapshots rendered inside
   /// the same shared `VrPeerAvatarStage` instanced batches as plaza NPCs.
