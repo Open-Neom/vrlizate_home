@@ -687,55 +687,158 @@ final class HomePlazaCrowd {
     return best;
   }
 
-  /// Pure-CPU rasterizer for the single floating NPC speech card. Testable in
-  /// headless environments without an Impeller GPU context.
+  /// Pure-CPU rasterizer for the floating semi-transparent NPC speech/thought
+  /// bubble (`💬` spoken / `💭` thought). Testable in headless environments
+  /// without an Impeller GPU context.
   @visibleForTesting
   static Future<VrTextBitmap> rasterizeBarkBubble(
     String header,
     String comment, {
     String? actionHint,
     Color accent = const Color(0xFF38BDF8),
+    bool isThought = false,
+    bool isSpeakingTts = false,
+    bool isBusy = false,
   }) async {
+    final badge = isSpeakingTts
+        ? '🔊'
+        : (isBusy || isThought ? '💭' : '💬');
     final fullText = actionHint == null || actionHint.isEmpty
-        ? '$header\n«$comment»'
-        : '$header\n«$comment»\n$actionHint';
+        ? '$badge $header\n«$comment»'
+        : '$badge $header\n«$comment»\n$actionHint';
     final bitmap = await VrTextRaster.rasterize(
       fullText,
       color: const Color(0xFFF8FAFC),
       fontWeight: FontWeight.w700,
-      fontSize: 52,
-      paddingPx: 22,
-      maxLines: actionHint == null ? 3 : 4,
+      fontSize: 48,
+      paddingPx: 26,
+      maxLines: actionHint == null ? 4 : 5,
       maxWidthPx: 1120,
     );
-    final pixels = Uint8List.fromList(bitmap.pixels);
+    const tailHeight = 26;
     final w = bitmap.width;
-    final h = bitmap.height;
-    const bgR = 0x0B, bgG = 0x13, bgB = 0x22;
-    final accentArgb = accent.toARGB32();
+    final bodyH = bitmap.height;
+    final h = bodyH + tailHeight;
+    final pixels = Uint8List(w * h * 4);
+    final src = bitmap.pixels;
+
+    final effectiveAccent = isSpeakingTts
+        ? const Color(0xFF34D399)
+        : (isThought ? const Color(0xFFC084FC) : accent);
+    final accentArgb = effectiveAccent.toARGB32();
     final acR = (accentArgb >> 16) & 255;
     final acG = (accentArgb >> 8) & 255;
     final acB = accentArgb & 255;
-    const borderBarPx = 4;
 
-    for (var y = 0; y < h; y++) {
-      final isAccentBar = y < borderBarPx || y >= h - borderBarPx;
-      final rowOffset = y * w * 4;
+    // Translucent dark cosmic glass background (semi-transparent so the 3D
+    // world stays natively visible behind the speech/thought cloud!).
+    final bgR = isThought ? 0x18 : 0x09;
+    final bgG = isThought ? 0x10 : 0x14;
+    final bgB = isThought ? 0x2E : 0x26;
+    const bgAlpha = 182; // ~71% opacity — crisp readability + native translucency
+    const borderPx = 4.0;
+    final radius = math.min(
+      isThought ? 48.0 : 30.0,
+      math.min(w, bodyH) * 0.34,
+    );
+
+    // Draw rounded semi-transparent bubble body + luminous border + text.
+    for (var y = 0; y < bodyH; y++) {
+      final dyTop = radius - y;
+      final dyBot = y - (bodyH - 1 - radius);
+      final dy = dyTop > 0 ? dyTop : (dyBot > 0 ? dyBot : 0.0);
+      final srcRow = y * w * 4;
+      final dstRow = y * w * 4;
       for (var x = 0; x < w; x++) {
-        final idx = rowOffset + x * 4;
-        final alpha = pixels[idx + 3];
-        final baseR = isAccentBar ? acR : bgR;
-        final baseG = isAccentBar ? acG : bgG;
-        final baseB = isAccentBar ? acB : bgB;
-        pixels[idx] =
-            (pixels[idx] * alpha + baseR * (255 - alpha) + 127) ~/ 255;
-        pixels[idx + 1] =
-            (pixels[idx + 1] * alpha + baseG * (255 - alpha) + 127) ~/ 255;
-        pixels[idx + 2] =
-            (pixels[idx + 2] * alpha + baseB * (255 - alpha) + 127) ~/ 255;
-        pixels[idx + 3] = 246;
+        final dxLeft = radius - x;
+        final dxRight = x - (w - 1 - radius);
+        final dx = dxLeft > 0 ? dxLeft : (dxRight > 0 ? dxRight : 0.0);
+        final cornerDist = (dx > 0 && dy > 0)
+            ? math.sqrt(dx * dx + dy * dy)
+            : 0.0;
+        if (cornerDist > radius) continue;
+
+        final edgeDist = (dx > 0 && dy > 0)
+            ? (radius - cornerDist)
+            : math.min(
+                math.min(x.toDouble(), (w - 1 - x).toDouble()),
+                math.min(y.toDouble(), (bodyH - 1 - y).toDouble()),
+              );
+        final isBorder = edgeDist < borderPx;
+
+        final srcIdx = srcRow + x * 4;
+        final dstIdx = dstRow + x * 4;
+        final textAlpha = src[srcIdx + 3];
+        final baseR = isBorder ? acR : bgR;
+        final baseG = isBorder ? acG : bgG;
+        final baseB = isBorder ? acB : bgB;
+        final baseA = isBorder ? 228 : bgAlpha;
+
+        if (textAlpha == 0) {
+          pixels[dstIdx] = baseR;
+          pixels[dstIdx + 1] = baseG;
+          pixels[dstIdx + 2] = baseB;
+          pixels[dstIdx + 3] = baseA;
+        } else {
+          // Composite crisp white/bright glyph cleanly over translucent glass.
+          final inv = 255 - textAlpha;
+          final outA = textAlpha + ((baseA * inv + 127) ~/ 255);
+          pixels[dstIdx] =
+              (src[srcIdx] * textAlpha + baseR * inv + 127) ~/ 255;
+          pixels[dstIdx + 1] =
+              (src[srcIdx + 1] * textAlpha + baseG * inv + 127) ~/ 255;
+          pixels[dstIdx + 2] =
+              (src[srcIdx + 2] * textAlpha + baseB * inv + 127) ~/ 255;
+          pixels[dstIdx + 3] = outA.clamp(0, 255);
+        }
       }
     }
+
+    // Draw speech pointer triangle or floating thought dots below the bubble.
+    final cx = w * 0.5;
+    if (isThought) {
+      void drawDot(double dotX, double dotY, double r, int alpha) {
+        final rSq = r * r;
+        final minX = math.max(0, (dotX - r - 1).floor());
+        final maxX = math.min(w - 1, (dotX + r + 1).ceil());
+        final minY = math.max(bodyH, (dotY - r - 1).floor());
+        final maxY = math.min(h - 1, (dotY + r + 1).ceil());
+        for (var y = minY; y <= maxY; y++) {
+          final dy = y - dotY;
+          for (var x = minX; x <= maxX; x++) {
+            final dx = x - dotX;
+            final dSq = dx * dx + dy * dy;
+            if (dSq <= rSq) {
+              final idx = (y * w + x) * 4;
+              final rim = dSq > (r - 2.2) * (r - 2.2);
+              pixels[idx] = rim ? acR : bgR;
+              pixels[idx + 1] = rim ? acG : bgG;
+              pixels[idx + 2] = rim ? acB : bgB;
+              pixels[idx + 3] = rim ? 220 : alpha;
+            }
+          }
+        }
+      }
+
+      drawDot(cx - 8, bodyH + 8, 7.5, 190);
+      drawDot(cx + 8, bodyH + 19, 5.0, 170);
+    } else {
+      for (var dy = 0; dy < tailHeight - 4; dy++) {
+        final y = bodyH + dy;
+        final halfW = ((tailHeight - 4 - dy) * 0.85).round();
+        final leftX = math.max(0, (cx - halfW).round());
+        final rightX = math.min(w - 1, (cx + halfW).round());
+        for (var x = leftX; x <= rightX; x++) {
+          final isRim = (x - leftX) < 3 || (rightX - x) < 3 || dy >= tailHeight - 7;
+          final idx = (y * w + x) * 4;
+          pixels[idx] = isRim ? acR : bgR;
+          pixels[idx + 1] = isRim ? acG : bgG;
+          pixels[idx + 2] = isRim ? acB : bgB;
+          pixels[idx + 3] = isRim ? 222 : bgAlpha;
+        }
+      }
+    }
+
     return VrTextBitmap(pixels, w, h);
   }
 
@@ -788,6 +891,10 @@ final class HomePlazaCrowd {
     required vm.Vector3? viewerForward,
     required bool hideBarkBubble,
     required bool canTalkToVisitors,
+    String? activeTalkingNpcId,
+    String? activeTalkingNpcText,
+    bool activeNpcSpeakingTts = false,
+    bool activeNpcBusy = false,
   }) {
     if (!_gpuMounted ||
         hideBarkBubble ||
@@ -800,22 +907,35 @@ final class HomePlazaCrowd {
     final focused = findFocusedVisitor(
       eyePosition,
       viewerForward,
-      maxDistance: 3.55,
-      minForwardDot: 0.65,
+      maxDistance: 4.35,
+      minForwardDot: 0.60,
     );
     if (focused == null) {
       _activeBarkLabel?.node.visible = false;
       _activeBarkLabel = null;
       return;
     }
-    final key = '${focused.id}|${focused.ambientComment}|$canTalkToVisitors';
+    final isActiveConversant = activeTalkingNpcId == focused.id;
+    final liveComment =
+        (isActiveConversant &&
+            activeTalkingNpcText != null &&
+            activeTalkingNpcText.trim().isNotEmpty)
+        ? activeTalkingNpcText.trim()
+        : focused.ambientComment;
+    final speakingTts = isActiveConversant && activeNpcSpeakingTts;
+    final busy = isActiveConversant && activeNpcBusy;
+    // Idle visitors display a soft thought cloud (`💭`); once engaged or
+    // speaking TTS they switch seamlessly to a spoken glass bubble (`💬`/`🔊`).
+    final isThought = !isActiveConversant && !focused.talkingToPlayer;
+    final key =
+        '${focused.id}|$liveComment|$canTalkToVisitors|$isThought|$speakingTts|$busy';
     final cached = _barkCache[key];
     if (cached != null) {
       if (!identical(_activeBarkLabel, cached)) {
         _activeBarkLabel?.node.visible = false;
         _activeBarkLabel = cached;
       }
-      final labelY = focused.appearance.heightMeters + 0.36;
+      final labelY = focused.appearance.heightMeters + 0.44;
       cached.node.localTransform = vm.Matrix4.translationValues(
         focused.x,
         labelY,
@@ -832,13 +952,27 @@ final class HomePlazaCrowd {
     _barkPendingKeys.add(key);
     final epoch = _mountEpoch;
     final header = '${focused.displayName} · ${focused.role}';
-    final comment = focused.ambientComment;
-    final hint = canTalkToVisitors ? '[ A · Hablar (IA Local) ]' : null;
+    final comment = liveComment.length > 168
+        ? '${liveComment.substring(0, 167)}…'
+        : liveComment;
+    final String? hint;
+    if (!canTalkToVisitors) {
+      hint = null;
+    } else if (busy) {
+      hint = 'Pensando respuesta…';
+    } else if (speakingTts) {
+      hint = 'X · 🔇 Callar voz   ·   Y · 💬 Otra idea   ·   L · WordSphere';
+    } else {
+      hint = 'X · 🔊 Escuchar   ·   Y · 💬 Charlar   ·   L · WordSphere';
+    }
     rasterizeBarkBubble(
       header,
       comment,
       actionHint: hint,
       accent: theme.accent,
+      isThought: isThought,
+      isSpeakingTts: speakingTts,
+      isBusy: busy,
     ).then((bitmap) {
       _barkPendingKeys.remove(key);
       if (_disposed || !_gpuMounted || epoch != _mountEpoch) return;
@@ -852,8 +986,12 @@ final class HomePlazaCrowd {
       final label = VrTextLabel.fromBitmap(
         bitmap,
         '$header\n$comment',
-        center: vm.Vector3(focused.x, focused.appearance.heightMeters + 0.36, focused.z),
-        height: math.min(0.30, 1.45 / bitmap.aspect),
+        center: vm.Vector3(
+          focused.x,
+          focused.appearance.heightMeters + 0.44,
+          focused.z,
+        ),
+        height: math.min(0.40, 1.68 / bitmap.aspect),
         name: 'npc_bark_${focused.id}',
       );
       label.node
@@ -874,6 +1012,10 @@ final class HomePlazaCrowd {
     void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
     bool hideBarkBubble = false,
     bool canTalkToVisitors = false,
+    String? activeTalkingNpcId,
+    String? activeTalkingNpcText,
+    bool activeNpcSpeakingTts = false,
+    bool activeNpcBusy = false,
   }) {
     if (_disposed || !time.isFinite) return;
     final dt = _lastTime < 0 ? (1 / 60) : (time - _lastTime).clamp(0.0, 0.1);
@@ -920,6 +1062,10 @@ final class HomePlazaCrowd {
       viewerForward: viewerForward,
       hideBarkBubble: hideBarkBubble,
       canTalkToVisitors: canTalkToVisitors,
+      activeTalkingNpcId: activeTalkingNpcId,
+      activeTalkingNpcText: activeTalkingNpcText,
+      activeNpcSpeakingTts: activeNpcSpeakingTts,
+      activeNpcBusy: activeNpcBusy,
     );
 
     if (_gpuMounted && _aerialOrbMesh != null) {

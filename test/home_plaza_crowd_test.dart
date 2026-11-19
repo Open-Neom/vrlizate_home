@@ -115,11 +115,23 @@ void main() {
       final bitmap = await HomePlazaCrowd.rasterizeBarkBubble(
         '${npc.displayName} · ${npc.role}',
         npc.ambientComment,
-        actionHint: '[ A · Hablar (IA Local) ]',
+        actionHint: 'X · 🔊 Escuchar · Y · 💬 Charlar · L · WordSphere',
+        isThought: true,
       );
       expect(bitmap.width, greaterThan(80));
       expect(bitmap.height, greaterThan(40));
       expect(bitmap.pixels.length, bitmap.width * bitmap.height * 4);
+      // Rounded corners outside the semi-transparent thought bubble stay clear
+      expect(bitmap.pixels[3], equals(0));
+      final spokenBitmap = await HomePlazaCrowd.rasterizeBarkBubble(
+        '${npc.displayName} · ${npc.role}',
+        npc.ambientComment,
+        actionHint: 'X · 🔇 Callar voz · Y · 💬 Otra idea',
+        isThought: false,
+        isSpeakingTts: true,
+      );
+      expect(spokenBitmap.width, greaterThan(80));
+      expect(spokenBitmap.height, greaterThan(40));
       crowd.dispose();
     });
 

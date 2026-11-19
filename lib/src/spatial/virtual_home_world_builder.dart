@@ -1227,6 +1227,10 @@ class VirtualHomeWorldBuilder {
     void Function(vm.Vector3 visitorPosition)? onVisitorGreeted,
     bool hideBarkBubble = false,
     bool canTalkToVisitors = false,
+    String? activeTalkingNpcId,
+    String? activeTalkingNpcText,
+    bool activeNpcSpeakingTts = false,
+    bool activeNpcBusy = false,
   }) {
     if (eyePosition != null) observe(eyePosition);
     _crowd?.tick(
@@ -1236,6 +1240,10 @@ class VirtualHomeWorldBuilder {
       onVisitorGreeted: onVisitorGreeted,
       hideBarkBubble: hideBarkBubble,
       canTalkToVisitors: canTalkToVisitors,
+      activeTalkingNpcId: activeTalkingNpcId,
+      activeTalkingNpcText: activeTalkingNpcText,
+      activeNpcSpeakingTts: activeNpcSpeakingTts,
+      activeNpcBusy: activeNpcBusy,
     );
     if (identical(_hoveredWaypoint, hoveredWaypoint)) return;
     _hoveredWaypoint?.material.emissiveFactor.setValues(0, 0, 0, 1);

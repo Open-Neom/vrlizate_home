@@ -490,7 +490,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   double _remoteAHoldSeconds = 0.0;
   bool _remoteBackDown = false;
   bool _remoteXDown = false, _remoteYDown = false;
-  bool _remoteMenuDown = false, _remoteOptionsDown = false;
+  bool _remoteMenuDown = false;
   bool _remoteJumpDown = false;
   bool _remoteLrChordLatched = false;
   bool _libraryHiddenByUser = false;
@@ -537,6 +537,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   int _npcSession = 0;
   VrWorldPose? _npcPose;
   VrHomeNpcDescriptor? _activeNpc;
+  VrHomeNpcDescriptor? _nativeTalkingNpc;
+  String? _focusedNpcId;
+  int _npcPromptCycleIndex = 0;
   Listenable? _npcChanges;
   Timer? _npcRefreshTimer;
   bool _npcPanelBuilding = false;
@@ -578,7 +581,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   String _currentZoneName = 'Biblioteca';
   double _time = 0.0;
   String _statusMessage =
-      'A: Aceptar / sostener=Turbo · B: Atrás / Saltar · X: WordSphere · Y: Menú · L+R: VRlizate';
+      'A: Entrar / sostener=Turbo · B: Atrás / Saltar · X: Voz · Y: Menú · L: WordSphere · R: Menú VR';
   // Open in touch-only preparation; hiding controls enters headset interaction.
   bool _hudHidden = false;
 
@@ -592,19 +595,27 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
 
   static const _navigationControllerActions = {
     'A': 'OK/Turbo',
-    'B': 'Atr/Salt',
-    'X': 'WordSphr',
+    'B': 'Atrás',
+    'X': 'Voz',
     'Y': 'Menú',
-    'L': '+R Sys',
-    'R': '+L Sys',
+    'L': 'WordSphr',
+    'R': 'Menú VR',
+  };
+  static const _npcFocusControllerActions = {
+    'A': 'Saludar',
+    'B': 'Atrás',
+    'X': 'Escuchar',
+    'Y': 'Charlar',
+    'L': 'WordSphr',
+    'R': 'Menú VR',
   };
   static const _modalControllerActions = {
     'A': 'Aceptar',
     'B': 'Cerrar',
-    'X': 'WordSphr',
+    'X': 'Voz',
     'Y': 'Menú',
-    'L': '+R Sys',
-    'R': '+L Sys',
+    'L': 'WordSphr',
+    'R': 'Menú VR',
   };
 
   @override
@@ -1125,7 +1136,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       event.consume();
       _arbiter.submit(event);
       _arbiter.release(event);
-      _openNpcPanel(tappedNpc);
+      _engageNativeNpcBubble(tappedNpc);
       return;
     }
     if (hit != null && !_worldBuilder.blocksPointer(hit.node)) {
@@ -1160,6 +1171,18 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _demoAfterJump = null;
     _modalLaserTriggerQueued = false;
     _modalLaserTarget = null;
+    if (_bindings.npcSpeakingTts?.call() == true && _nativeTalkingNpc != null) {
+      final npc = _nativeTalkingNpc!;
+      unawaited(
+        _bindings.onNpcAction?.call(
+          'cancel',
+          npc,
+          _npcSpatialContext('cancel', npc),
+        ),
+      );
+      HapticFeedback.selectionClick();
+      return;
+    }
     if (_locomotion.isJumping) {
       _cancelJumpSafely();
       HapticFeedback.selectionClick();
@@ -1229,7 +1252,9 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       RemoteControllerMode.joystick,
       actions: _hasWorldModal
           ? _modalControllerActions
-          : _navigationControllerActions,
+          : (_focusedNpcId != null
+                ? _npcFocusControllerActions
+                : _navigationControllerActions),
       horizontalLook: true,
     );
   }
@@ -1288,11 +1313,19 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           if (!mounted) return;
           final badge = bubble.isThought ? '💭' : '💬';
           if (!bubble.isThought) {
-            // Nearby visitors notice spoken avatar messages!
-            _worldBuilder.reactCrowdToEvent(
-              vm.Vector3(_rig.eyeCenter.x, 1.5, _rig.eyeCenter.z),
-              reactionComment: '«${bubble.text}»',
-            );
+            final focusedNpc = _findNativeFocusedNpc();
+            if (focusedNpc != null && _bindings.onNpcAction != null) {
+              _triggerNativeNpcBubbleAction(
+                focusedNpc,
+                'written:${bubble.text}',
+              );
+            } else {
+              // Nearby visitors notice spoken avatar messages!
+              _worldBuilder.reactCrowdToEvent(
+                vm.Vector3(_rig.eyeCenter.x, 1.5, _rig.eyeCenter.z),
+                reactionComment: '«${bubble.text}»',
+              );
+            }
           }
           setState(() {
             _statusMessage = '$badge ${bubble.authorName}: «${bubble.text}»';
@@ -1344,7 +1377,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
               _remoteBackDown = false;
               _remotePointer.reset();
               _remoteXDown = _remoteYDown = false;
-              _remoteMenuDown = _remoteOptionsDown = false;
+              _remoteMenuDown = false;
               _modalLaserTriggerQueued = false;
               _modalLaserTarget = null;
             }
@@ -1433,47 +1466,39 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         final primaryPressed = state.btnA;
         final lrChord =
             (state.btnL && state.btnR) || (state.btnZL && state.btnZR);
-        final menuPressed = state.btnL || state.stickClick;
-        final optionsPressed = state.btnR;
+        // L is reserved globally for WordSphere and R for Menú General VRlizate.
+        // Stick click still toggles the local 3D space menu.
+        final menuPressed = state.stickClick;
 
         if (lrChord) {
-          // L + R simultaneously belongs exclusively to the VRlizate general
-          // system menu (handled globally by VrSubtleQuickMenuController).
           _remoteLrChordLatched = true;
-        } else if (!menuPressed && !optionsPressed && !state.btnZL && !state.btnZR) {
+        } else if (!state.btnL && !state.btnR && !state.btnZL && !state.btnZR) {
           _remoteLrChordLatched = false;
         }
 
-        if (!_remoteLrChordLatched) {
-          if (menuPressed && !_remoteMenuDown) {
-            if (_isLibraryInFrontOfViewer() && !_hasWorldModal) {
-              _cycleLibraryCategory(-1);
-            } else {
-              _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
-            }
-          }
-          if (optionsPressed && !_remoteOptionsDown) {
-            if (_isLibraryInFrontOfViewer() && !_hasWorldModal) {
-              _cycleLibraryCategory(1);
-            } else if (_optionsOpen) {
-              _dismissOptionsPanel();
-            } else {
-              _showOptionsPanel();
-            }
-          }
-        }
-        _remoteMenuDown = menuPressed;
-        _remoteOptionsDown = optionsPressed;
-
-        // Y = Mostrar / ocultar el Menú principal de la experiencia.
-        if (state.btnY && !_remoteYDown && !lrChord) {
+        if (!_remoteLrChordLatched && menuPressed && !_remoteMenuDown) {
           _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
         }
-        // X = Mostrar WordSphere para escribir un mensaje (hablado/pensado) en el avatar.
-        if (state.btnX && !_remoteXDown && !lrChord) {
-          if (_bindings.onOpenAvatarWordsphere != null) {
-            _bindings.onOpenAvatarWordsphere!();
-          } else if (!_hasWorldModal) {
+        _remoteMenuDown = menuPressed;
+
+        // Y = When focused on an NPC -> chat / request fresh reply directly in
+        // their floating semi-transparent speech bubble; otherwise toggle the
+        // main 3D space menu.
+        if (state.btnY && !_remoteYDown && !lrChord && !state.btnL && !state.btnR) {
+          final focusedNpc = _hasWorldModal ? null : _findNativeFocusedNpc();
+          if (focusedNpc != null) {
+            _cycleNativeNpcReply(focusedNpc);
+          } else {
+            _summonOrToggleMainMenu(toggleIfAlreadyHere: true);
+          }
+        }
+        // X = When focused on an NPC -> read/mute their floating speech/thought
+        // bubble aloud with TTS!
+        if (state.btnX && !_remoteXDown && !lrChord && !state.btnL && !state.btnR) {
+          final focusedNpc = _hasWorldModal ? null : _findNativeFocusedNpc();
+          if (focusedNpc != null) {
+            _triggerNativeNpcBubbleAction(focusedNpc, 'tts');
+          } else if (!_hasWorldModal && _isLibraryInFrontOfViewer()) {
             _cycleLibraryCategory(-1);
           }
         }
@@ -1592,8 +1617,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _remoteBackDown = state.btnB || state.isActionPressed;
     _remoteXDown = state.btnX;
     _remoteYDown = state.btnY;
-    _remoteMenuDown = state.btnL || state.stickClick;
-    _remoteOptionsDown = state.btnR;
+    _remoteMenuDown = state.stickClick;
     _remoteJumpDown = state.btnZR;
     _remoteLrChordLatched =
         (state.btnL && state.btnR) || (state.btnZL && state.btnZR);
@@ -1905,7 +1929,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         (hit == null ||
             (_worldBuilder.blocksPointer(hit.node) && npcDist < hit.distance) ||
             (!libraryInFront && npcDist + 0.30 < hit.distance))) {
-      _openNpcPanel(focusedNpc);
+      _engageNativeNpcBubble(focusedNpc);
       return;
     }
     if (hit != null && !_worldBuilder.blocksPointer(hit.node)) {
@@ -1931,7 +1955,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       return;
     }
     if (focusedNpc != null) {
-      _openNpcPanel(focusedNpc);
+      _engageNativeNpcBubble(focusedNpc);
       return;
     }
     // When standing inside any experience space/room, pressing A enters its
@@ -2398,6 +2422,37 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _rememberWalkablePosition();
 
     // 2. Static rooms and world-locked UI feedback.
+    final focusedNpcNow = (!_hasWorldModal && _bindings.onNpcAction != null)
+        ? _findNativeFocusedNpc()
+        : null;
+    final nextFocusedNpcId = focusedNpcNow?.id;
+    if (nextFocusedNpcId != _focusedNpcId) {
+      _focusedNpcId = nextFocusedNpcId;
+      _syncControllerActions();
+      if (focusedNpcNow != null && mounted) {
+        final hint =
+            '${focusedNpcNow.displayName} · X: Escuchar (Voz) · Y: Charlar · L: WordSphere';
+        if (_statusMessage != hint) {
+          setState(() => _statusMessage = hint);
+        }
+      }
+    }
+    // Release native talking lock gracefully if the player walks away (> 5.6m).
+    final nativeTalking = _nativeTalkingNpc;
+    if (nativeTalking != null && !_npcOpen) {
+      final dx = nativeTalking.position.x - _rig.eyeCenter.x;
+      final dz = nativeTalking.position.z - _rig.eyeCenter.z;
+      if (dx * dx + dz * dz > 5.6 * 5.6 &&
+          _focusedNpcId != nativeTalking.id) {
+        _worldBuilder.setVisitorTalking(null);
+        _nativeTalkingNpc = null;
+      }
+    }
+    final activeNpcId = _nativeTalkingNpc?.id ?? _activeNpc?.id;
+    final activeNpcText = activeNpcId == null
+        ? null
+        : (_bindings.npcLatestBark?.call(activeNpcId) ??
+              _bindings.npcText?.call());
     _worldBuilder.tick(
       _time,
       eyePosition: _rig.eyeCenter,
@@ -2409,6 +2464,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
           : (pos) => _bindings.onVisitorGreeted!(pos, _rig),
       hideBarkBubble: _hasWorldModal,
       canTalkToVisitors: _bindings.onNpcAction != null,
+      activeTalkingNpcId: activeNpcId,
+      activeTalkingNpcText: activeNpcText,
+      activeNpcSpeakingTts:
+          activeNpcId != null && (_bindings.npcSpeakingTts?.call() ?? false),
+      activeNpcBusy:
+          activeNpcId != null && (_bindings.npcBusy?.call() ?? false),
     );
     _itzliPanel?.update(dt);
     _roomPanel?.update(dt);
@@ -2534,7 +2595,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         if (interactiveNode != null) {
           _onSelect(interactiveNode);
         } else if (laserNpc != null) {
-          _openNpcPanel(laserNpc);
+          _engageNativeNpcBubble(laserNpc);
         } else {
           _handleRemoteTrigger();
         }
@@ -3530,81 +3591,85 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         buttonId: action,
       );
 
-  void _npcStateChanged() {
-    if (!mounted || !_npcOpen) return;
-    final activeNpc = _activeNpc;
-    if (activeNpc != null) {
-      final updatedBark = _bindings.npcLatestBark?.call(activeNpc.id);
-      if (updatedBark != null && updatedBark.trim().isNotEmpty) {
-        _worldBuilder.setVisitorComment(activeNpc.id, updatedBark);
-      }
+  HomePlazaVisitorState? _findNativeFocusedNpc() {
+    if (_bindings.onNpcAction == null) return null;
+    return _worldBuilder.findFocusedVisitor(
+      _rig.eyeCenter,
+      _rig.forward,
+      maxDistance: 4.35,
+      minForwardDot: 0.60,
+    );
+  }
+
+  /// Native NPC interaction: instead of opening a bulky opaque 7-button slab,
+  /// keep the visitor's floating semi-transparent speech bubble alive overhead
+  /// while the NPC turns to face the player and chats in real time.
+  void _engageNativeNpcBubble(HomePlazaVisitorState visitor) {
+    if (_bindings.onNpcAction == null || !mounted || _hasWorldModal) return;
+    if (_isEnteringDemo || _isDemoActive || _locomotion.isJumping) return;
+    final alreadyTalking = _nativeTalkingNpc?.id == visitor.id;
+    if (alreadyTalking) {
+      _cycleNativeNpcReply(visitor);
+      return;
     }
+    _triggerNativeNpcBubbleAction(visitor, 'open');
+  }
+
+  void _cycleNativeNpcReply(HomePlazaVisitorState visitor) {
+    const prompts = <String>['recommend', 'about_place', 'surprise'];
+    final action = prompts[_npcPromptCycleIndex % prompts.length];
+    _npcPromptCycleIndex++;
+    _triggerNativeNpcBubbleAction(visitor, action);
+  }
+
+  void _triggerNativeNpcBubbleAction(
+    HomePlazaVisitorState visitor,
+    String action,
+  ) {
+    final callback = _bindings.onNpcAction;
+    if (callback == null || !mounted) return;
+    final npc = _descriptorForVisitor(visitor);
+    _nativeTalkingNpc = npc;
+    _npcSession++;
+    final session = _npcSession;
+    _worldBuilder.setVisitorTalking(visitor.id);
+    _bindings.onSound?.call(VrHomeSound.hover);
+    HapticFeedback.selectionClick();
+    setState(() {
+      _statusMessage = action == 'tts'
+          ? '🔊 ${npc.displayName} · Voz (TTS) · X para callar'
+          : '💬 ${npc.displayName} · X: Escuchar · Y: Otra idea · L: WordSphere';
+    });
+    unawaited(
+      callback(action, npc, _npcSpatialContext(action, npc)).then((_) {
+        if (!mounted || session != _npcSession) return;
+        _syncNativeNpcBubbleFromBindings();
+      }).catchError((Object _) {}),
+    );
+  }
+
+  void _syncNativeNpcBubbleFromBindings() {
+    final target = _nativeTalkingNpc ?? _activeNpc;
+    if (target == null) return;
+    final updatedBark = _bindings.npcLatestBark?.call(target.id);
+    if (updatedBark != null && updatedBark.trim().isNotEmpty) {
+      _worldBuilder.setVisitorComment(target.id, updatedBark.trim());
+      return;
+    }
+    final liveText = _bindings.npcText?.call().trim();
+    if (liveText != null && liveText.isNotEmpty) {
+      _worldBuilder.setVisitorComment(target.id, liveText);
+    }
+  }
+
+  void _npcStateChanged() {
+    if (!mounted) return;
+    _syncNativeNpcBubbleFromBindings();
+    if (!_npcOpen) return;
     _npcRefreshTimer ??= Timer(const Duration(milliseconds: 160), () {
       _npcRefreshTimer = null;
       if (mounted && _npcOpen) _rebuildNpcPanel();
     });
-  }
-
-  void _openNpcPanel(HomePlazaVisitorState visitor) {
-    final callback = _bindings.onNpcAction;
-    if (callback == null || !mounted || _hasWorldModal) return;
-    if (_isEnteringDemo || _isDemoActive || _locomotion.isJumping) return;
-
-    final npc = _descriptorForVisitor(visitor);
-    final toNpc = vm.Vector3(
-      visitor.x - _rig.eyeCenter.x,
-      0,
-      visitor.z - _rig.eyeCenter.z,
-    );
-    final aimForward = toNpc.length2 > 0.04
-        ? toNpc.normalized()
-        : _rig.forward.clone();
-    final npcDist = toNpc.length;
-    final desiredDist = (npcDist - 0.35).clamp(
-      2.65,
-      HomeSpatialMetrics.communicationDistance,
-    );
-    final placement = _walkSpace.placePanel(
-      eye: _rig.eyeCenter,
-      forward: aimForward,
-      distance: desiredDist,
-      width: 1.56,
-    );
-    _npcPose = placement != null
-        ? VrWorldPose.fromViewer(
-            eye: _rig.eyeCenter.clone(),
-            forward: placement.forward,
-            distance: placement.distance,
-          )
-        : VrWorldPose.fromViewer(
-            eye: _rig.eyeCenter.clone(),
-            forward: aimForward,
-            distance: desiredDist,
-          );
-    _activeNpc = npc;
-    _npcSession++;
-    _npcGeneration++;
-    _npcPanelSnapshot = null;
-    _npcError = null;
-    _worldBuilder.setVisitorTalking(visitor.id);
-    _locomotion.suspendSmoothLocomotion();
-    _npcPanel?.removeFrom(_scene);
-    _npcPanel = null;
-    _modalNavigationLatched = false;
-    _modalLaserTriggerQueued = false;
-    _modalLaserTarget = null;
-    _bindings.onSound?.call(VrHomeSound.open);
-    setState(() {
-      _npcOpen = true;
-      _hudHidden = true;
-      _hoveredPedestal = null;
-      _hoveredWaypoint = null;
-      _statusMessage = 'Conversando con ${npc.displayName} · IA Embebida + TTS opcional';
-    });
-    _syncControllerActions();
-    HapticFeedback.selectionClick();
-    unawaited(_performNpcAction('open'));
-    unawaited(_rebuildNpcPanel());
   }
 
   Future<void> _rebuildNpcPanel() async {
