@@ -56,7 +56,7 @@ abstract final class HomeSurfaceTextures {
     HomeSurface surface,
     int resolution,
   ) => _bundles[(surface, resolution)] ??= () async {
-    final cachePrefix = 'home_v2|${surface.name}|$resolution';
+    final cachePrefix = 'home_v3|${surface.name}|$resolution';
     final cachedColor = await PbrTextureLibrary.readCookedKtx2(
       '$cachePrefix|color',
     );
@@ -224,10 +224,10 @@ abstract final class HomeSurfaceTextures {
     pbr
       ..baseColorTexture = color
       ..normalTexture = normal
-      ..normalScale = .72
+      ..normalScale = .88
       ..metallicRoughnessTexture = orm
       ..occlusionTexture = orm
-      ..occlusionStrength = .72
+      ..occlusionStrength = .84
       ..roughnessFactor = 1
       ..metallicFactor = finish == HomeLobbyFinish.trim ? 1 : 0;
     baked.baseColorTexture = color;

@@ -11,6 +11,7 @@ import 'package:vrlizate_scene/vrlizate_scene.dart'
         VrLook,
         VrPeerAvatarStage,
         VrQualityTier,
+        VrSky,
         VrTextBitmap,
         VrTextLabel,
         VrTextRaster;
@@ -69,6 +70,7 @@ class VirtualHomeWorldBuilder {
   /// Compatibility with older Home callers. Apps now live in the library.
   final List<PortalPedestal> pedestals = [];
 
+  Scene? _scene;
   Node? _environmentRoot;
   DirectionalLight? _sunLight;
   FloorWaypoint? _hoveredWaypoint;
@@ -237,10 +239,14 @@ class VirtualHomeWorldBuilder {
     _occluders.clear();
     _architecture.clear();
     _bakedArchitecture = bakedArchitecture ?? !enableShadows;
+    _scene = scene;
     final generation = ++_generation;
 
     final root = Node(name: 'home_lobby_environment');
     _environmentRoot = root;
+    _setupSkyAndIbl(scene);
+    _applyScenePolish(scene, highEnd: enableShadows);
+    _crowd?.peerStage.setShadowsEnabled(enableShadows);
     _setupLighting(
       root,
       enableShadows: enableShadows,
@@ -258,6 +264,56 @@ class VirtualHomeWorldBuilder {
     _setupLabels(scene, root, generation);
   }
 
+  /// Attaches a real physical sky dome + HDR image-based lighting (IBL)
+  /// aligned with the gallery's directional sunlight so honed stone, brushed
+  /// bronze trims, glass accents, and avatars receive authentic sky/sun
+  /// specular reflections and warm travertine floor bounce instead of flat
+  /// neutral grey lighting.
+  void _setupSkyAndIbl(Scene scene) {
+    final isDarkTheme = theme.id == 'midnight';
+    final sky = isDarkTheme
+        ? GradientSkySource(
+            zenithColor: vm.Vector3(0.05, 0.08, 0.20),
+            horizonColor: vm.Vector3(0.24, 0.28, 0.42),
+            groundColor: vm.Vector3(0.11, 0.10, 0.12),
+            sunDirection: vm.Vector3(0.30, 0.80, -0.55),
+            sunColor: vm.Vector3(2.2, 2.0, 2.3),
+            sunSharpness: 220,
+          )
+        : GradientSkySource(
+            zenithColor: vm.Vector3(0.09, 0.29, 0.62),
+            horizonColor: vm.Vector3(0.76, 0.83, 0.90),
+            groundColor: vm.Vector3(0.30, 0.26, 0.21),
+            sunDirection: vm.Vector3(0.30, 0.80, -0.55),
+            sunColor: vm.Vector3(3.5, 3.05, 2.38),
+            sunSharpness: 260,
+          );
+    VrSky.applyGradient(
+      scene,
+      sky,
+      intensity: isDarkTheme ? 0.78 : 0.92,
+      faceResolution: 64,
+      equirectWidth: 256,
+    );
+  }
+
+  /// Applies tier-gated architectural realism polish (subtle Screen-Space
+  /// Reflections on honed travertine & bronze trims + sunlit crevice AO) on
+  /// `high`/`ultra` GPUs while keeping `low`/`medium` light and fast.
+  void _applyScenePolish(Scene? scene, {required bool highEnd}) {
+    if (scene == null) return;
+    scene.screenSpaceReflections
+      ..enabled = highEnd
+      ..intensity = 0.40
+      ..maxDistance = 14.0
+      ..thickness = 0.35;
+    if (highEnd) {
+      scene.ambientOcclusion
+        ..radius = 0.44
+        ..directLightAffect = 0.28;
+    }
+  }
+
   void setShadowsEnabled(
     bool enabled, {
     int? shadowMapResolution,
@@ -270,6 +326,8 @@ class VirtualHomeWorldBuilder {
     if (shadowMapResolution != null) {
       sun.shadowMapResolution = shadowMapResolution;
     }
+    _crowd?.peerStage.setShadowsEnabled(enabled);
+    _applyScenePolish(_scene, highEnd: enabled);
     final baked = bakedArchitecture ?? !enabled;
     final prevRes = _textureTier != null
         ? HomeSurfaceTextures.resolutionForTier(_textureTier!)
@@ -293,9 +351,12 @@ class VirtualHomeWorldBuilder {
     required bool enableShadows,
     required int shadowMapResolution,
   }) {
+    final isMidnight = theme.id == 'midnight';
     _sunLight = DirectionalLight(
-      color: vm.Vector3(1, 0.97, 0.91),
-      intensity: 2.5,
+      color: isMidnight
+          ? vm.Vector3(0.84, 0.89, 1.0)
+          : vm.Vector3(1.0, 0.94, 0.84),
+      intensity: isMidnight ? 2.4 : 3.1,
       castsShadow: enableShadows,
       // Keep the shadow budget local to the plaza instead of the renderer's
       // four cascades extending 150 m. These are rasterized shadow maps.
@@ -303,7 +364,7 @@ class VirtualHomeWorldBuilder {
       shadowMaxDistance: 55,
       shadowMapResolution: shadowMapResolution,
       shadowFadeRange: 6,
-      shadowSoftness: .12,
+      shadowSoftness: .18,
     );
     root.add(
       Node(name: 'lobby_daylight')
@@ -329,17 +390,18 @@ class VirtualHomeWorldBuilder {
             x: (room.minX + room.maxX) / 2,
             y: 3.8,
             z: (room.minZ + room.maxZ) / 2,
-            r: 0.98,
-            g: 0.96,
-            b: 0.91,
-            intensity: 2.5,
-            range: 8.5,
+            r: 1.0,
+            g: 0.92,
+            b: 0.80,
+            intensity: 2.8,
+            range: 9.5,
           ),
         );
       }
     }
     for (final portal in ecosystemLayout.portals) {
-      final fill = Color.lerp(Colors.white, Color(portal.room.accent), .22)!;
+      final warmBase = const Color(0xFFFFF1DC);
+      final fill = Color.lerp(warmBase, Color(portal.room.accent), .24)!;
       _pointLightSpecs.add(
         _RoomPointLightSpec(
           x: portal.roomCenterX,
@@ -348,8 +410,8 @@ class VirtualHomeWorldBuilder {
           r: fill.r,
           g: fill.g,
           b: fill.b,
-          intensity: 2.5,
-          range: 8.0,
+          intensity: 2.7,
+          range: 8.8,
         ),
       );
     }
@@ -358,20 +420,20 @@ class VirtualHomeWorldBuilder {
         x: 0,
         y: 3.9,
         z: 0,
-        r: 0.92,
-        g: 0.96,
-        b: 1.0,
-        intensity: 3.0,
-        range: 14.5,
+        r: 1.0,
+        g: 0.94,
+        b: 0.85,
+        intensity: 3.2,
+        range: 15.0,
       ),
     );
 
     final poolSize = math.min(maxPooledPointLights, _pointLightSpecs.length);
     for (var i = 0; i < poolSize; i++) {
       final light = PointLight(
-        color: vm.Vector3(0.95, 0.96, 1.0),
-        intensity: 2.5,
-        range: 10.0,
+        color: vm.Vector3(1.0, 0.94, 0.85),
+        intensity: 2.8,
+        range: 10.5,
       );
       final node = Node(name: 'room_light_pool_$i')
         ..addComponent(PointLightComponent(light));
@@ -382,47 +444,52 @@ class VirtualHomeWorldBuilder {
   }
 
   void _setupArchitecture(Node root) {
-    // Vertex colors keep authored room palettes in six shared matte materials.
-    // Static boxes are batched by room/finish, retaining per-room culling and
-    // exact triangle raycasts without a draw call per book or facade detail.
+    // Vertex colors keep authored room palettes in six shared architectural
+    // materials: sunlit warm travertine, alabaster limewash, natural European
+    // oak, satin anodized champagne-bronze trim, and warm wool bouclé textiles.
+    final isMidnight = theme.id == 'midnight';
     final palette = <HomeLobbyFinish, int>{
-      HomeLobbyFinish.stone: Color.lerp(
-        theme.surface,
-        theme.foreground,
-        .38,
-      )!.toARGB32(),
-      HomeLobbyFinish.plaster: Color.lerp(
-        theme.surface,
-        theme.foreground,
-        .55,
-      )!.toARGB32(),
-      HomeLobbyFinish.oak: Color.lerp(
-        const Color(0xFFBBA183),
-        theme.secondary,
-        .25,
-      )!.toARGB32(),
-      HomeLobbyFinish.trim: theme.border.toARGB32(),
-      HomeLobbyFinish.fabric: Color.lerp(
-        theme.accent,
-        theme.muted,
-        .5,
-      )!.toARGB32(),
-      HomeLobbyFinish.rug: theme.muted.toARGB32(),
+      HomeLobbyFinish.stone: isMidnight
+          ? const Color(0xFF4F5462).toARGB32()
+          : Color.lerp(
+              const Color(0xFFDCD4C7),
+              theme.surface,
+              .10,
+            )!.toARGB32(),
+      HomeLobbyFinish.plaster: isMidnight
+          ? const Color(0xFF5D6170).toARGB32()
+          : Color.lerp(
+              const Color(0xFFEBE6DD),
+              theme.surface,
+              .06,
+            )!.toARGB32(),
+      HomeLobbyFinish.oak: isMidnight
+          ? const Color(0xFF8C6B4E).toARGB32()
+          : const Color(0xFFC29B70).toARGB32(),
+      HomeLobbyFinish.trim: isMidnight
+          ? const Color(0xFF6B6578).toARGB32()
+          : const Color(0xFF6A5E52).toARGB32(),
+      HomeLobbyFinish.fabric: isMidnight
+          ? Color.lerp(const Color(0xFF5B5570), theme.accent, .28)!.toARGB32()
+          : Color.lerp(const Color(0xFF6E7D7B), theme.accent, .20)!.toARGB32(),
+      HomeLobbyFinish.rug: isMidnight
+          ? const Color(0xFF474659).toARGB32()
+          : const Color(0xFFCEC6B9).toARGB32(),
     };
     const roughness = <HomeLobbyFinish, double>{
-      HomeLobbyFinish.stone: .66,
-      HomeLobbyFinish.plaster: .88,
-      HomeLobbyFinish.oak: .64,
-      HomeLobbyFinish.trim: .38,
-      HomeLobbyFinish.fabric: .94,
-      HomeLobbyFinish.rug: .96,
+      HomeLobbyFinish.stone: .54,
+      HomeLobbyFinish.plaster: .85,
+      HomeLobbyFinish.oak: .56,
+      HomeLobbyFinish.trim: .28,
+      HomeLobbyFinish.fabric: .92,
+      HomeLobbyFinish.rug: .94,
     };
     final materials = {
       for (final finish in HomeLobbyFinish.values)
         finish: _matte(
           0xFFFFFFFF,
           roughness: roughness[finish]!,
-          metallic: finish == HomeLobbyFinish.trim ? .38 : 0,
+          metallic: finish == HomeLobbyFinish.trim ? .76 : 0,
         )..vertexColorWeight = 1,
     };
     final bakedMaterials = {
@@ -1383,6 +1450,7 @@ class _HomeArchitectureVariant {
     final data = batch.build(
       defaultColor: defaultColor,
       bakedVertexShading: baked,
+      architecturalContactAo: true,
     );
     return Mesh(
       MeshGeometry.fromArrays(

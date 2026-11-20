@@ -30,8 +30,12 @@ class HomeArchitectureBatch {
   HomeArchitectureMeshData build({
     required int defaultColor,
     bool bakedVertexShading = false,
+    bool architecturalContactAo = false,
   }) {
-    final mesh = _ArchitectureMeshBuilder(bakedVertexShading);
+    final mesh = _ArchitectureMeshBuilder(
+      bakedVertexShading,
+      architecturalContactAo,
+    );
     for (final box in boxes) {
       mesh.add(box, defaultColor);
     }
@@ -43,9 +47,10 @@ class HomeArchitectureBatch {
 /// Twelve radial segments and eight latitude bands keep one full tree's two
 /// crowns at 336 triangles; no foliage alpha layers or per-frame work are used.
 class _ArchitectureMeshBuilder {
-  _ArchitectureMeshBuilder(this.baked);
+  _ArchitectureMeshBuilder(this.baked, this.contactAo);
 
   final bool baked;
+  final bool contactAo;
   final positions = <double>[];
   final normals = <double>[];
   final colors = <double>[];
@@ -85,11 +90,51 @@ class _ArchitectureMeshBuilder {
     final world = [p[0] + box.x, p[1] + box.y, p[2] + box.z];
     positions.addAll(world);
     normals.addAll(n);
-    colors.addAll(baked ? _bakeColor(color, n) : color);
+    final base = baked ? _bakeColor(color, n) : color;
+    final ao = contactAo ? _architecturalContactAo(world, p, n) : 1.0;
+    colors.addAll([base[0] * ao, base[1] * ao, base[2] * ao, base[3]]);
     final uv = uvMeters ?? _planarUv(world, n);
     final tile = box.finish.textureTileMeters;
     textureCoordinates.addAll([uv[0] / tile, uv[1] / tile]);
     return index;
+  }
+
+  /// Zero-cost baked architectural contact & overhang ambient occlusion.
+  /// Darkens wall-to-floor baseboards, furniture contact seams, ceiling coves,
+  /// and beam soffits without extra draw calls or shader instructions.
+  double _architecturalContactAo(
+    List<double> world,
+    List<double> local,
+    List<double> normal,
+  ) {
+    var ao = 1.0;
+    final wy = world[1];
+    final ny = normal[1];
+    final isFlatFloorSlab = ny > 0.75 && box.height <= 0.35 && wy <= 0.15;
+
+    // Grounded floor-contact crease on vertical walls, columns, plinths & sofas.
+    if (!isFlatFloorSlab && wy >= -0.05 && wy < 0.62) {
+      final t = (wy / 0.62).clamp(0.0, 1.0);
+      final smooth = t * t * (3.0 - 2.0 * t);
+      ao *= 0.76 + 0.24 * smooth;
+    }
+
+    // Ceiling-cove shadow near upper beam intersections on vertical surfaces.
+    if (ny.abs() < 0.5 && wy > 3.25) {
+      final t = ((wy - 3.25) / 1.25).clamp(0.0, 1.0);
+      ao *= 1.0 - 0.14 * t;
+    }
+
+    // Soft bounce darkening on downward-facing beam soffits & overhangs.
+    if (ny < -0.45) {
+      ao *= 0.80;
+    }
+
+    // Slight bottom-of-volume grounding on freestanding furniture/props.
+    if (!isFlatFloorSlab && box.height > 0.35 && local[1] < 0 && ny.abs() < 0.5) {
+      ao *= 0.93;
+    }
+    return ao.clamp(0.62, 1.0);
   }
 
   // World-space planar coordinates give adjacent panels the same texture
