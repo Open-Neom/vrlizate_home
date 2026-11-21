@@ -11,14 +11,137 @@ class HomePanelPlacement {
   final double distance;
 }
 
-/// Lightweight XZ body collision against the same boxes the GPU draws.
+/// Primary travel axis along which a [HomeWalkableElevation.ramp] interpolates
+/// from `startElevationMeters` to `endElevationMeters`.
+enum HomeElevationAxis { posX, negX, posZ, negZ }
+
+enum _ElevationKind { terrace, ramp, radialBowl }
+
+/// Walkable elevation zone enabling multi-level architectural worlds (terraces,
+/// smooth ramps, arched Venetian/Japanese bridges, and sunken amphitheaters)
+/// without breaking flat `y = 0` legacy rooms.
+class HomeWalkableElevation {
+  const HomeWalkableElevation.terrace({
+    required this.minX,
+    required this.maxX,
+    required this.minZ,
+    required this.maxZ,
+    required double elevationMeters,
+    this.id,
+  }) : _kind = _ElevationKind.terrace,
+       startElevationMeters = elevationMeters,
+       endElevationMeters = elevationMeters,
+       axis = HomeElevationAxis.posZ,
+       archHeightMeters = 0.0,
+       centerX = 0.0,
+       centerZ = 0.0,
+       innerRadius = 0.0,
+       outerRadius = 0.0;
+
+  /// Smooth `C¹` Hermite ramp or arched bridge (`archHeightMeters > 0`).
+  const HomeWalkableElevation.ramp({
+    required this.minX,
+    required this.maxX,
+    required this.minZ,
+    required this.maxZ,
+    required this.startElevationMeters,
+    required this.endElevationMeters,
+    required this.axis,
+    this.archHeightMeters = 0.0,
+    this.id,
+  }) : _kind = _ElevationKind.ramp,
+       centerX = 0.0,
+       centerZ = 0.0,
+       innerRadius = 0.0,
+       outerRadius = 0.0;
+
+  /// Circular sunken social amphitheater or raised pavilion mound.
+  const HomeWalkableElevation.radialBowl({
+    required this.centerX,
+    required this.centerZ,
+    required this.innerRadius,
+    required this.outerRadius,
+    required double centerElevationMeters,
+    double rimElevationMeters = 0.0,
+    this.id,
+  }) : _kind = _ElevationKind.radialBowl,
+       minX = centerX - outerRadius,
+       maxX = centerX + outerRadius,
+       minZ = centerZ - outerRadius,
+       maxZ = centerZ + outerRadius,
+       startElevationMeters = centerElevationMeters,
+       endElevationMeters = rimElevationMeters,
+       axis = HomeElevationAxis.posZ,
+       archHeightMeters = 0.0;
+
+  final String? id;
+  final _ElevationKind _kind;
+  final double minX, maxX, minZ, maxZ;
+  final double startElevationMeters;
+  final double endElevationMeters;
+  final HomeElevationAxis axis;
+  final double archHeightMeters;
+  final double centerX, centerZ, innerRadius, outerRadius;
+
+  /// Returns ground elevation in meters if `(x, z)` lies within this zone, or
+  /// `null` otherwise.
+  double? sampleAt(double x, double z) {
+    if (x < minX || x > maxX || z < minZ || z > maxZ) return null;
+    switch (_kind) {
+      case _ElevationKind.terrace:
+        return startElevationMeters;
+      case _ElevationKind.ramp:
+        final double rawT;
+        switch (axis) {
+          case HomeElevationAxis.posX:
+            rawT = maxX > minX ? (x - minX) / (maxX - minX) : 0.0;
+          case HomeElevationAxis.negX:
+            rawT = maxX > minX ? (maxX - x) / (maxX - minX) : 0.0;
+          case HomeElevationAxis.posZ:
+            rawT = maxZ > minZ ? (z - minZ) / (maxZ - minZ) : 0.0;
+          case HomeElevationAxis.negZ:
+            rawT = maxZ > minZ ? (maxZ - z) / (maxZ - minZ) : 0.0;
+        }
+        final t = rawT.clamp(0.0, 1.0);
+        // Smoothstep avoids sudden VR camera slope jolts at ramp entry/exit.
+        final smooth = t * t * (3.0 - 2.0 * t);
+        final slopeY =
+            startElevationMeters +
+            (endElevationMeters - startElevationMeters) * smooth;
+        final archY = archHeightMeters != 0.0
+            ? math.sin(t * math.pi) * archHeightMeters
+            : 0.0;
+        return slopeY + archY;
+      case _ElevationKind.radialBowl:
+        final dx = x - centerX;
+        final dz = z - centerZ;
+        final dist = math.sqrt(dx * dx + dz * dz);
+        if (dist > outerRadius) return null;
+        if (dist <= innerRadius || outerRadius <= innerRadius) {
+          return startElevationMeters;
+        }
+        final t = ((dist - innerRadius) / (outerRadius - innerRadius)).clamp(
+          0.0,
+          1.0,
+        );
+        final smooth = t * t * (3.0 - 2.0 * t);
+        return startElevationMeters +
+            (endElevationMeters - startElevationMeters) * smooth;
+    }
+  }
+}
+
+/// Lightweight XZ body collision + optional smooth multi-elevation surface
+/// queries against the same geometry the GPU draws.
 /// This is bounded, seated-controller locomotion, not physical room tracking.
 class HomeWalkSpace {
   HomeWalkSpace({
     this.bodyRadius = 0.25,
     Iterable<HomeRoom> rooms = HomeLobbyLayout.rooms,
     Iterable<HomeLobbyBox> boxes = HomeLobbyLayout.boxes,
+    Iterable<HomeWalkableElevation> elevations = const [],
   }) : rooms = List.unmodifiable(rooms),
+       elevations = List.unmodifiable(elevations),
        _physics = PhysicsCharacterSpace(
          bodyRadius: bodyRadius,
          regions: rooms.map(
@@ -37,9 +160,34 @@ class HomeWalkSpace {
          ),
        );
 
+  static const double defaultStandingEyeHeight = 1.60;
+
   final double bodyRadius;
   final List<HomeRoom> rooms;
+  final List<HomeWalkableElevation> elevations;
   final PhysicsCharacterSpace _physics;
+
+  /// Continuous ground floor elevation (in meters) at world `(x, z)`.
+  /// Returns `0.0` everywhere when no [elevations] are authored.
+  double groundHeightAt(double x, double z) {
+    if (elevations.isEmpty || !x.isFinite || !z.isFinite) return 0.0;
+    double? best;
+    for (final zone in elevations) {
+      final sampled = zone.sampleAt(x, z);
+      if (sampled == null) continue;
+      if (best == null || sampled > best) {
+        best = sampled;
+      }
+    }
+    return best ?? 0.0;
+  }
+
+  /// Target VR camera eye height at world `(x, z)`.
+  double eyeHeightAt(
+    double x,
+    double z, {
+    double standingEyeHeight = defaultStandingEyeHeight,
+  }) => groundHeightAt(x, z) + standingEyeHeight;
 
   HomeRoom? roomAt(double x, double z) {
     for (final room in rooms) {
@@ -60,7 +208,11 @@ class HomeWalkSpace {
   }) {
     for (final candidate in [current, lastSafe, jumpStart]) {
       if (candidate != null && canStand(candidate.x, candidate.z)) {
-        return vm.Vector3(candidate.x, 1.6, candidate.z);
+        return vm.Vector3(
+          candidate.x,
+          eyeHeightAt(candidate.x, candidate.z),
+          candidate.z,
+        );
       }
     }
     return null;
@@ -172,8 +324,8 @@ class HomeWalkSpace {
       }
     }
 
-    // Home owns its fixed seated eye height; collision is renderer-neutral.
-    return moved..y = 1.6;
+    // Follow multi-level terraces/ramps/bridges smoothly (1.60 m on flat y=0).
+    return moved..y = eyeHeightAt(moved.x, moved.z);
   }
 
   double _findOpenPassageLateral(

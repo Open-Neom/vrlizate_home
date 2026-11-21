@@ -365,10 +365,29 @@ class VirtualHomeLocomotionController {
 
     // Horizontal linear mix
     final pos = jump.from + (jump.to - jump.from) * jump.t;
-    // Parabolic vertical apex (+0.28m peak)
-    pos.y = 1.60 + sin(jump.t * pi) * 0.28;
+    // Smoothly bridge different terrace/ramp elevations + parabolic apex (+0.28m)
+    final baseY = jump.from.y + (jump.to.y - jump.from.y) * jump.t;
+    pos.y = baseY + sin(jump.t * pi) * 0.28;
 
     return (pos, false, null);
+  }
+
+  /// Exponentially damps vertical eye height transitions when walking across
+  /// ramps, arched bridges, sunken courts, or raised terraces to avoid VR
+  /// camera step jolts.
+  static double smoothVerticalEyeFollow({
+    required double currentY,
+    required double targetGroundY,
+    required double dt,
+    double standingEyeHeight = baseEyeHeight,
+    double followRate = 11.0,
+  }) {
+    final targetY = targetGroundY + standingEyeHeight;
+    if (!currentY.isFinite || !dt.isFinite || dt <= 0) return targetY;
+    final clampedDt = min(dt, 0.1);
+    final alpha = 1.0 - exp(-followRate * clampedDt);
+    final next = currentY + (targetY - currentY) * alpha;
+    return (next - targetY).abs() < 1e-4 ? targetY : next;
   }
 
   /// Walks and gradually faces a direction held at the left stick's outer edge.
@@ -679,7 +698,7 @@ class VirtualHomeLocomotionController {
           final cx = tx + cos(angle) * radius;
           final cz = tz + sin(angle) * radius;
           if (walkSpace.canStand(cx, cz)) {
-            return vm.Vector3(cx, 1.60, cz);
+            return vm.Vector3(cx, walkSpace.eyeHeightAt(cx, cz), cz);
           }
         }
       }

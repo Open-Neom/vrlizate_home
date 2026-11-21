@@ -520,32 +520,95 @@ class VirtualHomeWorldBuilder {
       _occluders.add(node);
     }
     _materialsReady = _dressArchitecture(_generation);
-    // This is an authored sky backdrop, not an opaque roof that should block
-    // daylight. Keep real beams in the static shadow batches, and render the
-    // sky separately so its color is independent of direct scene lighting.
-    for (final box in ecosystemLayout.boxes.where(
-      (box) => box.name == skyName,
-    )) {
-      final color = Color(box.color ?? 0xFFB8D9E5);
-      root.add(
-        Node(
-            name: 'lobby_${box.name}_backdrop',
-            mesh: Mesh(
-              CuboidGeometry(vm.Vector3(box.width, box.height, box.depth)),
-              UnlitMaterial()
-                ..baseColorFactor = vm.Vector4(
-                  _linearChannel(color.r),
-                  _linearChannel(color.g),
-                  _linearChannel(color.b),
-                  1,
-                ),
-            ),
-          )
-          ..localTransform = vm.Matrix4.translationValues(box.x, box.y, box.z)
-          ..raycastable = false
-          ..shadowCastingMode = ShadowCastingMode.off,
-      );
+    // Keep the open atrium clear overhead so the real physical HDR sky dome
+    // (`Scene.skybox` driven by `VrSky.applyGradient`) shines directly into
+    // the plaza instead of being blocked by a flat opaque ceiling card.
+    if (ecosystemLayout.portals.isNotEmpty) {
+      _setupAtriumArchitecturalFeatures(root);
     }
+  }
+
+  /// Adds organic architectural focal features to the open central arrival
+  /// plaza (Croquis 1: Sunlit Oak Pergola Louvers + Flush Reflecting Water
+  /// Mirror catching real Sky IBL & Screen-Space Reflections) without altering
+  /// walking collision or portal sightlines.
+  void _setupAtriumArchitecturalFeatures(Node root) {
+    final isMidnight = theme.id == 'midnight';
+    final skyBoxes = ecosystemLayout.boxes
+        .where((box) => box.name == 'ecosystem_atrium_sky')
+        .toList(growable: false);
+    if (skyBoxes.isNotEmpty) {
+      final sky = skyBoxes.first;
+      // Rhythmic architectural European-oak pergola ribs overhead casting
+      // sunlit bands across the travertine plaza floor.
+      final ribMat = _matte(
+        isMidnight ? 0xFF6A533E : 0xFFB89062,
+        roughness: 0.56,
+        metallic: 0.04,
+      );
+      final minZ = sky.z - sky.depth * 0.44;
+      final maxZ = sky.z + sky.depth * 0.44;
+      const ribSpacing = 3.2;
+      final ribSpan = math.min(sky.width - 2.0, 22.0);
+      var ribIndex = 0;
+      for (var z = minZ; z <= maxZ && ribIndex < 10; z += ribSpacing) {
+        root.add(
+          Node(
+              name: 'lobby_pergola_rib_${ribIndex++}',
+              mesh: Mesh(
+                CuboidGeometry(vm.Vector3(ribSpan, 0.22, 0.24)),
+                ribMat,
+              ),
+            )
+            ..localTransform = vm.Matrix4.translationValues(sky.x, 7.85, z)
+            ..raycastable = false
+            ..shadowStatic = true,
+        );
+      }
+    }
+
+    // Flush architectural Reflecting Water Mirror in the open arrival court
+    // (`z = 17.5`, clear of side planters at `x = ±5.2` and gallery portal).
+    // Low roughness (0.05) catches real Sky IBL and Screen-Space Reflections.
+    final waterMat = PhysicallyBasedMaterial()
+      ..baseColorFactor = isMidnight
+          ? vm.Vector4(0.015, 0.045, 0.075, 1.0)
+          : vm.Vector4(0.025, 0.095, 0.125, 1.0)
+      ..roughnessFactor = 0.05
+      ..metallicFactor = 0.16
+      ..vertexColorWeight = 0;
+    final curbMat = _matte(
+      isMidnight ? 0xFF555164 : 0xFF6B5F52,
+      roughness: 0.28,
+      metallic: 0.78,
+    );
+    const poolZ = 17.5;
+    const poolW = 5.4;
+    const poolD = 2.8;
+    root.add(
+      Node(
+          name: 'lobby_courtyard_water_mirror_curb',
+          mesh: Mesh(
+            CuboidGeometry(vm.Vector3(poolW + 0.24, 0.014, poolD + 0.24)),
+            curbMat,
+          ),
+        )
+        ..localTransform = vm.Matrix4.translationValues(0, 0.007, poolZ)
+        ..raycastable = false
+        ..shadowCastingMode = ShadowCastingMode.off,
+    );
+    root.add(
+      Node(
+          name: 'lobby_courtyard_water_mirror',
+          mesh: Mesh(
+            CuboidGeometry(vm.Vector3(poolW, 0.018, poolD)),
+            waterMat,
+          ),
+        )
+        ..localTransform = vm.Matrix4.translationValues(0, 0.009, poolZ)
+        ..raycastable = false
+        ..shadowCastingMode = ShadowCastingMode.off,
+    );
   }
 
   void _setupShowcases(Scene scene, Node root) {
