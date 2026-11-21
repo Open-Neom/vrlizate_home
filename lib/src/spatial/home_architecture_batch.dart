@@ -588,13 +588,19 @@ class _ElevationSurfaceMeshBuilder {
       return dSlope + dArch;
     }
 
+    final isOpenArch = r.archHeightMeters > 0.05;
+    const archDeckThickness = 0.22;
     final topA = <int>[];
     final topB = <int>[];
+    final botA = <int>[];
+    final botB = <int>[];
     final slicePointsA = <List<double>>[];
     final slicePointsB = <List<double>>[];
+    final sliceBotY = <double>[];
     for (var i = 0; i <= _rampSegments; i++) {
       final t = i / _rampSegments;
       final y = evalY(t);
+      final yBot = isOpenArch ? math.max(0.0, y - archDeckThickness) : 0.0;
       final dyDs = evalDyDt(t) / length;
       final signedDy = positive ? dyDs : -dyDs;
       final n = alongX
@@ -613,36 +619,49 @@ class _ElevationSurfaceMeshBuilder {
       }
       slicePointsA.add(pA);
       slicePointsB.add(pB);
+      sliceBotY.add(yBot);
       topA.add(_vertex(pA, n));
       topB.add(_vertex(pB, n));
+      if (isOpenArch) {
+        final soffitNormal = [-n[0], -n[1], -n[2]];
+        botA.add(_vertex([pA[0], yBot, pA[2]], soffitNormal));
+        botB.add(_vertex([pB[0], yBot, pB[2]], soffitNormal));
+      }
     }
 
     for (var i = 0; i < _rampSegments; i++) {
       _triangle(topA[i], topB[i], topB[i + 1]);
       _triangle(topA[i], topB[i + 1], topA[i + 1]);
+      if (isOpenArch && (sliceBotY[i] > 0.002 || sliceBotY[i + 1] > 0.002)) {
+        // Arched underside soffit so canals shine cleanly beneath the bridge.
+        _triangle(botA[i], botB[i + 1], botB[i]);
+        _triangle(botA[i], botA[i + 1], botB[i + 1]);
+      }
 
-      // Lateral skirts descending smoothly to y = 0.
+      // Lateral skirts (solid to y=0 for ramps, arched fascia for bridges).
       final a0 = slicePointsA[i], a1 = slicePointsA[i + 1];
       final b0 = slicePointsB[i], b1 = slicePointsB[i + 1];
+      final yb0 = sliceBotY[i], yb1 = sliceBotY[i + 1];
       final sideNormalA = alongX ? const [0.0, 0.0, -1.0] : const [-1.0, 0.0, 0.0];
       final sideNormalB = alongX ? const [0.0, 0.0, 1.0] : const [1.0, 0.0, 0.0];
-      if (a0[1] > 0.002 || a1[1] > 0.002) {
-        _quad([a0[0], 0.0, a0[2]], [a1[0], 0.0, a1[2]], a1, a0, sideNormalA);
+      if ((a0[1] - yb0) > 0.002 || (a1[1] - yb1) > 0.002) {
+        _quad([a0[0], yb0, a0[2]], [a1[0], yb1, a1[2]], a1, a0, sideNormalA);
       }
-      if (b0[1] > 0.002 || b1[1] > 0.002) {
-        _quad([b1[0], 0.0, b1[2]], [b0[0], 0.0, b0[2]], b0, b1, sideNormalB);
+      if ((b0[1] - yb0) > 0.002 || (b1[1] - yb1) > 0.002) {
+        _quad([b1[0], yb1, b1[2]], [b0[0], yb0, b0[2]], b0, b1, sideNormalB);
       }
     }
 
-    // End caps if either ramp terminal sits above y = 0.
+    // End caps if either ramp terminal sits above its bottom edge.
     for (final isEnd in const [false, true]) {
       final idx = isEnd ? _rampSegments : 0;
       final a = slicePointsA[idx];
       final b = slicePointsB[idx];
-      if (a[1] <= 0.004) continue;
+      final yb = sliceBotY[idx];
+      if ((a[1] - yb) <= 0.004) continue;
       final dirSign = (isEnd == positive) ? 1.0 : -1.0;
       final capNormal = alongX ? [dirSign, 0.0, 0.0] : [0.0, 0.0, dirSign];
-      _quad([a[0], 0.0, a[2]], [b[0], 0.0, b[2]], b, a, capNormal);
+      _quad([a[0], yb, a[2]], [b[0], yb, b[2]], b, a, capNormal);
     }
   }
 

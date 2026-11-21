@@ -552,10 +552,13 @@ class VirtualHomeWorldBuilder {
   /// walking collision or portal sightlines.
   void _setupAtriumArchitecturalFeatures(Node root) {
     final isMidnight = theme.id == 'midnight';
+    final isHomeArrivalPlaza = ecosystemLayout.rooms.any(
+      (r) => r.id == 'ecosystem_corridor' && r.minZ >= 10.0,
+    );
     final skyBoxes = ecosystemLayout.boxes
         .where((box) => box.name == 'ecosystem_atrium_sky')
         .toList(growable: false);
-    if (skyBoxes.isNotEmpty) {
+    if (isHomeArrivalPlaza && skyBoxes.isNotEmpty) {
       final sky = skyBoxes.first;
       // Rhythmic architectural European-oak pergola ribs overhead casting
       // sunlit bands across the travertine plaza floor.
@@ -585,9 +588,12 @@ class VirtualHomeWorldBuilder {
       }
     }
 
-    // Flush architectural Reflecting Water Mirror in the open arrival court
-    // (`z = 17.5`, clear of side planters at `x = ±5.2` and gallery portal).
-    // Low roughness (0.05) catches real Sky IBL and Screen-Space Reflections.
+    // Flush architectural Reflecting Water Mirror surfaces (low roughness 0.05
+    // catching real HDR Sky IBL and Screen-Space Reflections):
+    // - Home Gallery arrival plaza (`minZ >= 10.0`): courtyard water mirror at
+    //   z = 17.5 with travertine stepping stones.
+    // - Famous Malls (`marina_canal_water_*` / `artz_water_mirror_*`): upgrade
+    //   authored canal and reflecting-pool strips with physical mirror water!
     final waterMat = PhysicallyBasedMaterial()
       ..baseColorFactor = isMidnight
           ? vm.Vector4(0.015, 0.045, 0.075, 1.0)
@@ -595,6 +601,38 @@ class VirtualHomeWorldBuilder {
       ..roughnessFactor = 0.05
       ..metallicFactor = 0.16
       ..vertexColorWeight = 0;
+
+    final waterBoxes = ecosystemLayout.boxes
+        .where(
+          (b) =>
+              b.name.startsWith('ecosystem_marina_canal_water_') ||
+              b.name.startsWith('ecosystem_artz_water_mirror_'),
+        )
+        .toList(growable: false);
+    if (waterBoxes.isNotEmpty) {
+      for (final wb in waterBoxes) {
+        root.add(
+          Node(
+              name: '${wb.name}_ssr_mirror',
+              mesh: Mesh(
+                CuboidGeometry(vm.Vector3(wb.width, 0.016, wb.depth)),
+                waterMat,
+              ),
+            )
+            ..localTransform = vm.Matrix4.translationValues(
+              wb.x,
+              wb.y + 0.008,
+              wb.z,
+            )
+            ..raycastable = false
+            ..shadowCastingMode = ShadowCastingMode.off,
+        );
+      }
+      return;
+    }
+
+    if (!isHomeArrivalPlaza) return;
+
     final curbMat = _matte(
       isMidnight ? 0xFF555164 : 0xFF6B5F52,
       roughness: 0.28,

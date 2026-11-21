@@ -242,5 +242,116 @@ void main() {
         crowd.dispose();
       },
     );
+
+    test(
+      'Croquis 2 Famous Malls: open-arch +1.25m canal bridges, multi-level terraces/daises, soffit normals, and interactive benches across all 4 archetypes',
+      () {
+        final booths = <VrHomeEcosystemRoom>[
+          for (var i = 0; i < 16; i++)
+            VrHomeEcosystemRoom.forLease(
+              id: 'croquis2_booth_$i',
+              title: 'Local $i',
+              description: 'Local interactivo',
+              boothCode: 'C-$i',
+            ),
+        ];
+
+        for (final archetype in FamousMallArchetype.values) {
+          final layout = HomeFamousMallLayout.build(
+            archetype: archetype,
+            mallTitle: archetype.name,
+            booths: booths,
+          );
+          expect(layout.elevations, isNotEmpty, reason: archetype.name);
+          expect(layout.seats, hasLength(2), reason: archetype.name);
+
+          final space = HomeWalkSpace(
+            rooms: layout.rooms,
+            boxes: layout.boxes,
+            elevations: layout.elevations,
+          );
+
+          // Every interactive bench has a walkable stand-up & valid focus check.
+          for (final seat in layout.seats) {
+            expect(
+              space.canStand(seat.standUpX, seat.standUpZ),
+              isTrue,
+              reason: '${archetype.name} seat ${seat.id}',
+            );
+          }
+
+          // Batched elevation surfaces build with finite unit normals & tangents.
+          final mesh = HomeArchitectureBatch.buildElevationSurfaces(
+            elevations: layout.elevations,
+            architecturalContactAo: true,
+          );
+          expect(mesh, isNotNull, reason: archetype.name);
+          expect(mesh!.indices.length % 3, 0);
+          for (var i = 0; i < mesh.normals.length; i += 3) {
+            final len = math.sqrt(
+              mesh.normals[i] * mesh.normals[i] +
+                  mesh.normals[i + 1] * mesh.normals[i + 1] +
+                  mesh.normals[i + 2] * mesh.normals[i + 2],
+            );
+            expect(len, closeTo(1.0, 1e-3));
+          }
+        }
+
+        // Verify Marina Bay Sands open-arch Venetian canal bridges (+1.25 m apex)
+        // and Rain Oculus skywalk (+0.55 m) with downward-facing arch soffits!
+        final marina = HomeFamousMallLayout.build(
+          archetype: FamousMallArchetype.marinaCanalShoppes,
+          mallTitle: 'Marina Bay Canales',
+          booths: booths,
+        );
+        final marinaSpace = HomeWalkSpace(
+          rooms: marina.rooms,
+          boxes: marina.boxes,
+          elevations: marina.elevations,
+        );
+        expect(marinaSpace.groundHeightAt(0, 0), closeTo(0.55, 1e-6));
+        expect(marinaSpace.groundHeightAt(-8.3, 0), closeTo(1.25, 1e-6));
+        expect(marinaSpace.groundHeightAt(8.3, 0), closeTo(1.25, 1e-6));
+        // Walk straight across the West Venetian arched bridge over the canal!
+        var bridgePos = vm.Vector3(-8.3, 1.60, -5.6);
+        var maxBridgeEye = 0.0;
+        for (var s = 0; s < 112; s++) {
+          bridgePos = marinaSpace.move(bridgePos, 0, 0.1);
+          expect(marinaSpace.canStand(bridgePos.x, bridgePos.z), isTrue);
+          if (bridgePos.y > maxBridgeEye) maxBridgeEye = bridgePos.y;
+        }
+        expect(bridgePos.z, closeTo(5.6, 1e-3));
+        expect(maxBridgeEye, closeTo(2.85, 0.02));
+        expect(bridgePos.y, closeTo(1.60, 1e-4));
+
+        // Open-arch bridge mesh must contain downward-facing soffit normals (ny < -0.5).
+        final marinaMesh = HomeArchitectureBatch.buildElevationSurfaces(
+          elevations: marina.elevations,
+          architecturalContactAo: true,
+        )!;
+        var hasSoffit = false;
+        for (var i = 1; i < marinaMesh.normals.length; i += 3) {
+          if (marinaMesh.normals[i] < -0.5) {
+            hasSoffit = true;
+            break;
+          }
+        }
+        expect(hasSoffit, isTrue);
+
+        // Verify Plaza Artz MX raised central park deck (+0.68 m) + water bridge arch!
+        final artz = HomeFamousMallLayout.build(
+          archetype: FamousMallArchetype.plazaArtzMexico,
+          mallTitle: 'Plaza Artz MX',
+          booths: booths,
+        );
+        final artzSpace = HomeWalkSpace(
+          rooms: artz.rooms,
+          boxes: artz.boxes,
+          elevations: artz.elevations,
+        );
+        expect(artzSpace.groundHeightAt(0, 0), closeTo(0.68, 1e-6));
+        expect(artzSpace.groundHeightAt(5.5, 0), closeTo(0.69, 0.02));
+      },
+    );
   });
 }

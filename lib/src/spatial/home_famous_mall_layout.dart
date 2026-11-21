@@ -3,6 +3,7 @@ import 'package:vrlizate_world/vrlizate_world.dart';
 import '../ecosystem/vr_home_ecosystem_room.dart';
 import 'home_ecosystem_layout.dart';
 import 'home_lobby_layout.dart';
+import 'home_walk_space.dart';
 import 'home_world_objects.dart';
 
 /// Architectural digital-twin archetypes of iconic world & Mexican plazas/malls.
@@ -78,6 +79,7 @@ abstract final class HomeFamousMallLayout {
       HomeLobbyFinish finish = HomeLobbyFinish.plaster,
       int? color,
       HomeLobbyShape shape = HomeLobbyShape.cuboid,
+      bool walkable = false,
     ]) {
       boxes.add(
         HomeLobbyBox(
@@ -92,6 +94,7 @@ abstract final class HomeFamousMallLayout {
           shape: shape,
           color: color,
           zone: 'promenade',
+          walkable: walkable,
         ),
       );
     }
@@ -198,8 +201,11 @@ abstract final class HomeFamousMallLayout {
       }
     }
 
-    // Build archetype-specific iconic central landmark & roof architecture.
-    _buildArchetypeLandmark(archetype, pBox, objects);
+    // Build archetype-specific iconic central landmark, multi-elevation Croquis 2
+    // bridges/terraces/daises, interactive benches, & roof architecture.
+    final elevations = <HomeWalkableElevation>[];
+    final seats = <HomeInteractiveSeat>[];
+    _buildArchetypeLandmark(archetype, pBox, objects, elevations, seats);
 
     // 16 symmetric slots around the 4 cardinal plaza facades (4 per wing).
     const wingCenters = [-13.5, -4.5, 4.5, 13.5];
@@ -334,6 +340,89 @@ abstract final class HomeFamousMallLayout {
       portals: portals,
       worldObjects: objects.entities,
       waypoints: waypoints,
+      elevations: elevations,
+      seats: seats,
+    );
+  }
+
+  static void _addScenicBench({
+    required void Function(
+      String,
+      double,
+      double,
+      double,
+      double,
+      double,
+      double, [
+      HomeLobbyFinish,
+      int?,
+      HomeLobbyShape,
+      bool,
+    ])
+    pBox,
+    required List<HomeInteractiveSeat> seats,
+    required String id,
+    required String label,
+    required double x,
+    required double z,
+    required double lookAtX,
+    required double lookAtZ,
+    required double standUpX,
+    required double standUpZ,
+    required double backOffsetX,
+    required double backOffsetZ,
+    required bool alongX,
+  }) {
+    final seatW = alongX ? 2.4 : 0.70;
+    final seatD = alongX ? 0.70 : 2.4;
+    pBox(
+      '${id}_seat',
+      x,
+      0.44,
+      z,
+      seatW,
+      0.14,
+      seatD,
+      HomeLobbyFinish.oak,
+      0xFFB28B5E,
+      HomeLobbyShape.beveledBox,
+    );
+    pBox(
+      '${id}_back',
+      x + backOffsetX,
+      0.82,
+      z + backOffsetZ,
+      alongX ? 2.4 : 0.12,
+      0.66,
+      alongX ? 0.12 : 2.4,
+      HomeLobbyFinish.oak,
+      0xFFB28B5E,
+      HomeLobbyShape.beveledBox,
+    );
+    for (final dir in const [-1.0, 1.0]) {
+      pBox(
+        '${id}_foot_$dir',
+        alongX ? x + dir * 0.88 : x,
+        0.20,
+        alongX ? z : z + dir * 0.88,
+        alongX ? 0.14 : 0.50,
+        0.40,
+        alongX ? 0.50 : 0.14,
+        HomeLobbyFinish.trim,
+        0xFF756D61,
+      );
+    }
+    seats.add(
+      HomeInteractiveSeat(
+        id: id,
+        label: label,
+        x: x,
+        z: z,
+        lookAtX: lookAtX,
+        lookAtZ: lookAtZ,
+        standUpX: standUpX,
+        standUpZ: standUpZ,
+      ),
     );
   }
 
@@ -350,49 +439,97 @@ abstract final class HomeFamousMallLayout {
       HomeLobbyFinish,
       int?,
       HomeLobbyShape,
+      bool,
     ])
     pBox,
     VrWorldRegistry objects,
+    List<HomeWalkableElevation> elevations,
+    List<HomeInteractiveSeat> seats,
   ) {
     switch (archetype) {
       case FamousMallArchetype.galleriaMilano:
-        // Galleria Vittorio Emanuele II: walkable central mosaic Ottagono +
-        // 8 Neo-Renaissance triumphal arch piers + gilded octagonal dome.
+        // Galleria Vittorio Emanuele II: raised +0.38 m sculpted circular
+        // marble Ottagono dais + inlaid mosaic medallion + 8 Neo-Renaissance
+        // triumphal arch piers + gilded octagonal dome + café terrace benches.
+        const ottagonoY = 0.38;
+        elevations.add(
+          const HomeWalkableElevation.radialBowl(
+            id: 'milano_ottagono_dais',
+            centerX: 0,
+            centerZ: 0,
+            innerRadius: 5.4,
+            outerRadius: 8.8,
+            centerElevationMeters: ottagonoY,
+          ),
+        );
         pBox(
           'milano_mosaic_outer',
           0,
-          .007,
+          ottagonoY + .007,
           0,
-          12.4,
+          10.6,
           .014,
-          12.4,
+          10.6,
           HomeLobbyFinish.trim,
           0xFFC69C53,
           HomeLobbyShape.cylinder,
+          true,
         );
         pBox(
           'milano_mosaic_inner',
           0,
-          .013,
+          ottagonoY + .013,
           0,
-          8.6,
+          7.6,
           .014,
-          8.6,
+          7.6,
           HomeLobbyFinish.stone,
           0xFFF7F1E3,
           HomeLobbyShape.cylinder,
+          true,
         );
         pBox(
           'milano_mosaic_crest',
           0,
-          .019,
+          ottagonoY + .019,
           0,
-          3.4,
+          3.2,
           .014,
-          3.4,
+          3.2,
           HomeLobbyFinish.trim,
           0xFF991B1B,
           HomeLobbyShape.cylinder,
+          true,
+        );
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'milano_cafe_bench_sw',
+          label: 'Terraza Café Ottagono (SO)',
+          x: -8.6,
+          z: 8.6,
+          lookAtX: 0.0,
+          lookAtZ: 0.0,
+          standUpX: -7.5,
+          standUpZ: 7.5,
+          backOffsetX: 0.0,
+          backOffsetZ: 0.31,
+          alongX: true,
+        );
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'milano_cafe_bench_ne',
+          label: 'Terraza Café Ottagono (NE)',
+          x: 8.6,
+          z: -8.6,
+          lookAtX: 0.0,
+          lookAtZ: 0.0,
+          standUpX: 7.5,
+          standUpZ: -7.5,
+          backOffsetX: 0.0,
+          backOffsetZ: -0.31,
+          alongX: true,
         );
         for (final sx in const [-1.0, 1.0]) {
           for (final sz in const [-1.0, 1.0]) {
@@ -463,9 +600,63 @@ abstract final class HomeFamousMallLayout {
         }
 
       case FamousMallArchetype.plazaArtzMexico:
-        // Plaza Artz / Antara (CDMX / Guadalajara): walkable flush reflecting
-        // glass-deck water mirrors + 4 corner garden trees leaving a massive,
-        // obstacle-free central park court under cantilevered oak pergolas.
+        // Plaza Artz / Antara (CDMX / Guadalajara): raised +0.68 m basalt & oak
+        // central park deck reached via North/South smooth ramps and East/West
+        // open-arch footbridges spanning right over the twin reflecting water
+        // mirrors, plus 4 corner garden trees & interactive park benches.
+        const artzDeckY = 0.68;
+        elevations.addAll(const [
+          HomeWalkableElevation.terrace(
+            id: 'artz_central_park_deck',
+            minX: -2.4,
+            maxX: 2.4,
+            minZ: -4.2,
+            maxZ: 4.2,
+            elevationMeters: artzDeckY,
+          ),
+          HomeWalkableElevation.ramp(
+            id: 'artz_ramp_north',
+            minX: -2.4,
+            maxX: 2.4,
+            minZ: -8.2,
+            maxZ: -4.2,
+            startElevationMeters: 0.0,
+            endElevationMeters: artzDeckY,
+            axis: HomeElevationAxis.posZ,
+          ),
+          HomeWalkableElevation.ramp(
+            id: 'artz_ramp_south',
+            minX: -2.4,
+            maxX: 2.4,
+            minZ: 4.2,
+            maxZ: 8.2,
+            startElevationMeters: artzDeckY,
+            endElevationMeters: 0.0,
+            axis: HomeElevationAxis.posZ,
+          ),
+          HomeWalkableElevation.ramp(
+            id: 'artz_water_bridge_west',
+            minX: -8.6,
+            maxX: -2.4,
+            minZ: -2.0,
+            maxZ: 2.0,
+            startElevationMeters: 0.0,
+            endElevationMeters: artzDeckY,
+            axis: HomeElevationAxis.posX,
+            archHeightMeters: 0.35,
+          ),
+          HomeWalkableElevation.ramp(
+            id: 'artz_water_bridge_east',
+            minX: 2.4,
+            maxX: 8.6,
+            minZ: -2.0,
+            maxZ: 2.0,
+            startElevationMeters: artzDeckY,
+            endElevationMeters: 0.0,
+            axis: HomeElevationAxis.posX,
+            archHeightMeters: 0.35,
+          ),
+        ]);
         for (final side in const [-1.0, 1.0]) {
           pBox(
             'artz_water_curb_$side',
@@ -514,6 +705,36 @@ abstract final class HomeFamousMallLayout {
             );
           }
         }
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'artz_park_bench_nw',
+          label: 'Banca Jardín Artz (NO)',
+          x: -8.6,
+          z: -8.2,
+          lookAtX: 0.0,
+          lookAtZ: 0.0,
+          standUpX: -7.6,
+          standUpZ: -7.2,
+          backOffsetX: 0.0,
+          backOffsetZ: -0.31,
+          alongX: true,
+        );
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'artz_park_bench_se',
+          label: 'Banca Jardín Artz (SE)',
+          x: 8.6,
+          z: 8.2,
+          lookAtX: 0.0,
+          lookAtZ: 0.0,
+          standUpX: 7.6,
+          standUpZ: 7.2,
+          backOffsetX: 0.0,
+          backOffsetZ: 0.31,
+          alongX: true,
+        );
         // Cantilevered Sordo Madaleno oak & basalt perimeter pergolas.
         for (final sign in const [-1.0, 1.0]) {
           pBox(
@@ -541,12 +762,24 @@ abstract final class HomeFamousMallLayout {
         }
 
       case FamousMallArchetype.dubaiGrandAtrium:
-        // The Dubai Mall Grand Atrium: sleek sculpted central cascading
-        // waterfall column with wide open promenades all around it.
+        // The Dubai Mall Grand Atrium: sculpted +0.42 m circular alabaster
+        // promenade encircling the cascading central waterfall column +
+        // interactive atrium lounge benches.
+        const dubaiPromenadeY = 0.42;
+        elevations.add(
+          const HomeWalkableElevation.radialBowl(
+            id: 'dubai_waterfall_promenade',
+            centerX: 0,
+            centerZ: 0,
+            innerRadius: 3.2,
+            outerRadius: 7.4,
+            centerElevationMeters: dubaiPromenadeY,
+          ),
+        );
         pBox(
           'dubai_fountain_basin',
           0,
-          .24,
+          dubaiPromenadeY + .24,
           0,
           3.4,
           .48,
@@ -558,7 +791,7 @@ abstract final class HomeFamousMallLayout {
         pBox(
           'dubai_fountain_water',
           0,
-          .50,
+          dubaiPromenadeY + .50,
           0,
           2.9,
           .06,
@@ -570,7 +803,7 @@ abstract final class HomeFamousMallLayout {
         pBox(
           'dubai_waterfall_cylinder',
           0,
-          4.6,
+          dubaiPromenadeY + 4.4,
           0,
           1.9,
           8.4,
@@ -631,14 +864,80 @@ abstract final class HomeFamousMallLayout {
           0xFFFDE047,
           HomeLobbyShape.cylinder,
         );
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'dubai_atrium_bench_sw',
+          label: 'Banca Cascada Atrium (SO)',
+          x: -8.6,
+          z: 8.2,
+          lookAtX: 0.0,
+          lookAtZ: 0.0,
+          standUpX: -7.6,
+          standUpZ: 7.2,
+          backOffsetX: 0.0,
+          backOffsetZ: 0.31,
+          alongX: true,
+        );
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'dubai_atrium_bench_ne',
+          label: 'Banca Cascada Atrium (NE)',
+          x: 8.6,
+          z: -8.2,
+          lookAtX: 0.0,
+          lookAtZ: 0.0,
+          standUpX: 7.6,
+          standUpZ: -7.2,
+          backOffsetX: 0.0,
+          backOffsetZ: -0.31,
+          alongX: true,
+        );
 
       case FamousMallArchetype.marinaCanalShoppes:
-        // Marina Bay Sands Canal Shoppes: walkable glass-skywalk Rain Oculus
-        // & glowing turquoise indoor canals — zero blocking curbs across center.
+        // Croquis 2 — Marina Bay Sands / Venetian Canal Arcades:
+        // +0.55 m sculpted central Rain Oculus skywalk dais + TWO open-arch
+        // +1.25 m Venetian pedestrian bridges arching right over the glowing
+        // turquoise indoor canals so water reflects clearly beneath them, plus
+        // canal-side café benches.
+        const oculusY = 0.55;
+        elevations.addAll(const [
+          HomeWalkableElevation.radialBowl(
+            id: 'marina_rain_oculus_skywalk',
+            centerX: 0,
+            centerZ: 0,
+            innerRadius: 2.3,
+            outerRadius: 5.4,
+            centerElevationMeters: oculusY,
+          ),
+          HomeWalkableElevation.ramp(
+            id: 'marina_arched_bridge_west',
+            minX: -9.8,
+            maxX: -6.8,
+            minZ: -5.2,
+            maxZ: 5.2,
+            startElevationMeters: 0.0,
+            endElevationMeters: 0.0,
+            axis: HomeElevationAxis.posZ,
+            archHeightMeters: 1.25,
+          ),
+          HomeWalkableElevation.ramp(
+            id: 'marina_arched_bridge_east',
+            minX: 6.8,
+            maxX: 9.8,
+            minZ: -5.2,
+            maxZ: 5.2,
+            startElevationMeters: 0.0,
+            endElevationMeters: 0.0,
+            axis: HomeElevationAxis.posZ,
+            archHeightMeters: 1.25,
+          ),
+        ]);
         pBox(
           'marina_oculus_basin',
           0,
-          .008,
+          oculusY + .008,
           0,
           4.4,
           .016,
@@ -646,11 +945,12 @@ abstract final class HomeFamousMallLayout {
           HomeLobbyFinish.stone,
           0xFFE2E8F0,
           HomeLobbyShape.cylinder,
+          true,
         );
         pBox(
           'marina_oculus_water',
           0,
-          .016,
+          oculusY + .016,
           0,
           3.7,
           .012,
@@ -658,6 +958,7 @@ abstract final class HomeFamousMallLayout {
           HomeLobbyFinish.trim,
           0xFF06B6D4,
           HomeLobbyShape.cylinder,
+          true,
         );
         for (final side in const [-1.0, 1.0]) {
           pBox(
@@ -682,20 +983,64 @@ abstract final class HomeFamousMallLayout {
             HomeLobbyFinish.trim,
             0xFF22D3EE,
           );
-          for (final railSide in const [-1.0, 1.0]) {
+          // Warm oak abutment lanterns framing both ends of each arched bridge.
+          for (final endSign in const [-1.0, 1.0]) {
             pBox(
-              'marina_bridge_deck_${side}_$railSide',
-              side * 3.65,
-              .018,
-              0,
-              2.2,
-              .014,
-              4.0,
+              'marina_bridge_lamp_post_${side}_$endSign',
+              side * 10.1,
+              1.10,
+              endSign * 5.05,
+              .18,
+              2.20,
+              .18,
               HomeLobbyFinish.oak,
-              0xFFC29B61,
+              0xFFB28B5E,
+              HomeLobbyShape.cylinder,
+            );
+            pBox(
+              'marina_bridge_lamp_globe_${side}_$endSign',
+              side * 10.1,
+              2.32,
+              endSign * 5.05,
+              .30,
+              .30,
+              .30,
+              HomeLobbyFinish.trim,
+              0xFFFFE7A8,
+              HomeLobbyShape.ellipsoid,
             );
           }
         }
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'marina_canal_bench_nw',
+          label: 'Banca Paseo del Canal (NO)',
+          x: -8.3,
+          z: -8.2,
+          lookAtX: -8.3,
+          lookAtZ: 0.0,
+          standUpX: -8.3,
+          standUpZ: -7.0,
+          backOffsetX: 0.0,
+          backOffsetZ: -0.31,
+          alongX: true,
+        );
+        _addScenicBench(
+          pBox: pBox,
+          seats: seats,
+          id: 'marina_canal_bench_se',
+          label: 'Banca Paseo del Canal (SE)',
+          x: 8.3,
+          z: 8.2,
+          lookAtX: 8.3,
+          lookAtZ: 0.0,
+          standUpX: 8.3,
+          standUpZ: 7.0,
+          backOffsetX: 0.0,
+          backOffsetZ: 0.31,
+          alongX: true,
+        );
         for (var rib = -3; rib <= 3; rib++) {
           pBox(
             'marina_skylight_rib_$rib',
