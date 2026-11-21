@@ -25,6 +25,7 @@ import 'home_room_identity.dart';
 import 'home_plaza_crowd.dart';
 import 'home_surface_textures.dart';
 import 'home_showcase.dart';
+import 'home_walk_space.dart';
 import 'virtual_home_models.dart';
 
 /// Static living-room architecture behind Home's world-locked app library.
@@ -86,6 +87,7 @@ class VirtualHomeWorldBuilder {
   final Map<Node, VrHomeEcosystemRoom> _rooms = Map.identity();
   final Set<Node> _occluders = Set.identity();
   final List<_HomeArchitectureVariant> _architecture = [];
+  _HomeElevationVariant? _elevationVariant;
   Future<void> _materialsReady = Future<void>.value();
   final List<HomeShowcase> _showcases = [];
   HomePlazaCrowd? _crowd;
@@ -238,6 +240,7 @@ class VirtualHomeWorldBuilder {
     _rooms.clear();
     _occluders.clear();
     _architecture.clear();
+    _elevationVariant = null;
     _bakedArchitecture = bakedArchitecture ?? !enableShadows;
     _scene = scene;
     final generation = ++_generation;
@@ -342,6 +345,7 @@ class VirtualHomeWorldBuilder {
       for (final architecture in _architecture) {
         architecture.apply(baked: baked);
       }
+      _elevationVariant?.apply(baked: baked);
       _materialsReady = _dressArchitecture(_generation);
     }
   }
@@ -519,6 +523,20 @@ class VirtualHomeWorldBuilder {
       root.add(node);
       _occluders.add(node);
     }
+    if (ecosystemLayout.elevations.isNotEmpty) {
+      final elevationNode = Node(name: 'lobby_elevation_surfaces')
+        ..shadowStatic = true;
+      final variant = _HomeElevationVariant(
+        node: elevationNode,
+        elevations: ecosystemLayout.elevations,
+        color: isMidnight ? 0xFF474354 : 0xFFE5DDD0,
+        pbrMaterial: materials[HomeLobbyFinish.stone]!,
+        bakedMaterial: bakedMaterials[HomeLobbyFinish.stone]!,
+      )..apply(baked: _bakedArchitecture);
+      _elevationVariant = variant;
+      root.add(elevationNode);
+      _occluders.add(elevationNode);
+    }
     _materialsReady = _dressArchitecture(_generation);
     // Keep the open atrium clear overhead so the real physical HDR sky dome
     // (`Scene.skybox` driven by `VrSky.applyGradient`) shines directly into
@@ -609,6 +627,29 @@ class VirtualHomeWorldBuilder {
         ..raycastable = false
         ..shadowCastingMode = ShadowCastingMode.off,
     );
+    // Flush travertine stepping-stone pavers spanning the central axis across
+    // the water mirror so walking from Gallery -> Grand Crucero crosses curated
+    // architectural stone pads framed by reflective water on both sides.
+    final paverMat = _matte(
+      isMidnight ? 0xFF565265 : 0xFFEAE2D4,
+      roughness: 0.52,
+      metallic: 0.02,
+    );
+    for (var i = 0; i < 4; i++) {
+      final pz = (poolZ - poolD * 0.38) + i * (poolD * 0.255);
+      root.add(
+        Node(
+            name: 'lobby_water_stepping_stone_$i',
+            mesh: Mesh(
+              CuboidGeometry(vm.Vector3(1.56, 0.024, 0.48)),
+              paverMat,
+            ),
+          )
+          ..localTransform = vm.Matrix4.translationValues(0, 0.012, pz)
+          ..raycastable = false
+          ..shadowCastingMode = ShadowCastingMode.off,
+      );
+    }
   }
 
   void _setupShowcases(Scene scene, Node root) {
@@ -1281,6 +1322,7 @@ class VirtualHomeWorldBuilder {
     _rooms.clear();
     _occluders.clear();
     _architecture.clear();
+    _elevationVariant = null;
   }
 
   void _installThemeSkyEnvironment(Scene scene) {
@@ -1515,6 +1557,53 @@ class _HomeArchitectureVariant {
       bakedVertexShading: baked,
       architecturalContactAo: true,
     );
+    return Mesh(
+      MeshGeometry.fromArrays(
+        positions: data.positions,
+        normals: data.normals,
+        texCoords: data.textureCoordinates,
+        tangents: data.tangents,
+        colors: data.colors,
+        indices: data.indices,
+      ),
+      baked ? bakedMaterial : pbrMaterial,
+    );
+  }
+}
+
+class _HomeElevationVariant {
+  _HomeElevationVariant({
+    required this.node,
+    required this.elevations,
+    required this.color,
+    required this.pbrMaterial,
+    required this.bakedMaterial,
+  });
+
+  final Node node;
+  final List<HomeWalkableElevation> elevations;
+  final int color;
+  final PhysicallyBasedMaterial pbrMaterial;
+  final UnlitMaterial bakedMaterial;
+  Mesh? _pbrMesh, _bakedMesh;
+
+  void apply({required bool baked}) {
+    final mesh = baked
+        ? (_bakedMesh ??= _createMesh(baked: true))
+        : (_pbrMesh ??= _createMesh(baked: false));
+    if (mesh != null) {
+      node.mesh = mesh;
+    }
+  }
+
+  Mesh? _createMesh({required bool baked}) {
+    final data = HomeArchitectureBatch.buildElevationSurfaces(
+      elevations: elevations,
+      color: color,
+      bakedVertexShading: baked,
+      architecturalContactAo: true,
+    );
+    if (data == null) return null;
     return Mesh(
       MeshGeometry.fromArrays(
         positions: data.positions,

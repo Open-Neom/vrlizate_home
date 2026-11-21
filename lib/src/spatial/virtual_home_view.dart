@@ -465,6 +465,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
   final VirtualHomeLocomotionController _locomotion =
       VirtualHomeLocomotionController();
   late HomeWalkSpace _walkSpace;
+  HomeInteractiveSeat? _seatedSeat;
+  HomeInteractiveSeat? _focusedSeat;
   vm.Vector3? _lastSafePosition;
   final VrSpatialInputState _gamepadMotion = VrSpatialInputState();
   final PortalGazeRearm _portalRearm = PortalGazeRearm();
@@ -640,6 +642,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _walkSpace = HomeWalkSpace(
       rooms: _worldBuilder.ecosystemLayout.rooms,
       boxes: _worldBuilder.ecosystemLayout.boxes,
+      elevations: _worldBuilder.ecosystemLayout.elevations,
     );
     _scene = Scene();
     _createRoomController();
@@ -647,10 +650,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _foreground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    _rig = StereoHeadRig(
-      eyeCenter:
-          _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.60, 0),
-    );
+    final initialEye =
+        _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.60, 0);
+    _rig = StereoHeadRig(eyeCenter: initialEye);
+    _locomotion.snapBaseEyeY(initialEye.y);
     _arbiter = VrInputArbiter();
 
     // 0. Attach Reference Gamepad Driver & Physical Hardware Adapter
@@ -825,7 +828,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _walkSpace = HomeWalkSpace(
         rooms: _worldBuilder.ecosystemLayout.rooms,
         boxes: _worldBuilder.ecosystemLayout.boxes,
+        elevations: _worldBuilder.ecosystemLayout.elevations,
       );
+      _seatedSeat = null;
+      _focusedSeat = null;
       final customChanged = !identical(
         oldWidget.bindings.customEcosystemLayout,
         widget.bindings.customEcosystemLayout,
@@ -833,10 +839,12 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       if (customChanged && _bindings.initialEyePosition != null) {
         _rig.eyeCenter = _bindings.initialEyePosition!.clone();
         _locomotion.cancelJump();
+        _locomotion.snapBaseEyeY(_rig.eyeCenter.y);
       } else if (!_walkSpace.canStand(_rig.eyeCenter.x, _rig.eyeCenter.z)) {
         _rig.eyeCenter =
             _bindings.initialEyePosition?.clone() ?? vm.Vector3(0, 1.6, 0);
         _locomotion.cancelJump();
+        _locomotion.snapBaseEyeY(_rig.eyeCenter.y);
       }
       _bindHost(openPairing: _pendingInitialPairing);
       if (!_isDemoActive) _resumeHomeProducers();
@@ -1208,9 +1216,69 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       });
       return;
     }
+    if (_seatedSeat != null) {
+      _standUpFromSeat();
+      return;
+    }
     if (_locomotion.triggerHop()) {
       HapticFeedback.lightImpact();
       _bindings.onSound?.call(VrHomeSound.hover);
+    }
+  }
+
+  HomeInteractiveSeat? _findFocusedSeat() {
+    final seats = _worldBuilder.ecosystemLayout.seats;
+    if (seats.isEmpty || _seatedSeat != null) return null;
+    HomeInteractiveSeat? best;
+    var bestDistSq = double.infinity;
+    for (final seat in seats) {
+      if (!seat.isFocusedBy(_rig.eyeCenter, _rig.forward)) continue;
+      final dSq = seat.horizontalDistanceSquared(_rig.eyeCenter);
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        best = seat;
+      }
+    }
+    return best;
+  }
+
+  void _sitOnSeat(HomeInteractiveSeat seat) {
+    _locomotion.cancelJump();
+    _seatedSeat = seat;
+    _focusedSeat = null;
+    final seatEye = vm.Vector3(seat.x, _rig.eyeCenter.y, seat.z);
+    _rig.eyeCenter = seatEye;
+    VirtualHomeLocomotionController.faceHorizontalPoint(
+      _rig,
+      seatEye,
+      seat.lookAtX,
+      seat.lookAtZ,
+    );
+    HapticFeedback.mediumImpact();
+    _bindings.onSound?.call(VrHomeSound.click);
+    setState(() {
+      _statusMessage =
+          'Sentado en ${seat.label} · Mira alrededor o pulsa B para levantarte';
+    });
+  }
+
+  void _standUpFromSeat({bool announce = true}) {
+    final seat = _seatedSeat;
+    if (seat == null) return;
+    _seatedSeat = null;
+    final targetX = _walkSpace.canStand(seat.standUpX, seat.standUpZ)
+        ? seat.standUpX
+        : (_lastSafePosition?.x ?? 0.0);
+    final targetZ = _walkSpace.canStand(seat.standUpX, seat.standUpZ)
+        ? seat.standUpZ
+        : (_lastSafePosition?.z ?? 0.0);
+    _rig.eyeCenter = vm.Vector3(targetX, _rig.eyeCenter.y, targetZ);
+    _rememberWalkablePosition();
+    HapticFeedback.selectionClick();
+    if (announce && mounted) {
+      setState(() {
+        _statusMessage = 'De pie · Explora el Pabellón';
+      });
     }
   }
 
@@ -1218,7 +1286,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     if (!_walkSpace.canStand(_rig.eyeCenter.x, _rig.eyeCenter.z)) return;
     (_lastSafePosition ??= vm.Vector3.zero()).setValues(
       _rig.eyeCenter.x,
-      1.6,
+      _walkSpace.eyeHeightAt(_rig.eyeCenter.x, _rig.eyeCenter.z),
       _rig.eyeCenter.z,
     );
   }
@@ -1231,7 +1299,10 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         jumpStart: jump.from,
         lastSafe: _lastSafePosition,
       );
-      if (landing != null) _rig.eyeCenter = landing;
+      if (landing != null) {
+        _rig.eyeCenter = landing;
+        _locomotion.snapBaseEyeY(landing.y);
+      }
     }
     _locomotion.cancelJump();
     _rememberWalkablePosition();
@@ -1671,6 +1742,8 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     _dismissOptionsPanel(announce: false, haptic: false, rebuild: rebuild);
     _closeRoomPanel(rebuild: rebuild);
     _demoAfterJump = null;
+    _seatedSeat = null;
+    _focusedSeat = null;
     _cancelJumpSafely();
     _setGamepadAttached(false);
     _bindings.onSuspend?.call();
@@ -1961,6 +2034,11 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       _engageNativeNpcBubble(focusedNpc);
       return;
     }
+    final seat = _focusedSeat ?? _findFocusedSeat();
+    if (seat != null && _seatedSeat == null) {
+      _sitOnSeat(seat);
+      return;
+    }
     // When standing inside any experience space/room, pressing A enters its
     // experience directly without needing pixel-precise aim at the terminal.
     final currentSpace = _ecosystemRoomForCurrentSpace();
@@ -2171,9 +2249,15 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
       if (matched != null) break;
     }
     final wp = matched ?? _worldBuilder.waypoints.first;
+    _seatedSeat = null;
+    _focusedSeat = null;
     _locomotion.startJump(
       from: _rig.eyeCenter,
-      to: vm.Vector3(wp.position.x, 1.60, wp.position.z),
+      to: vm.Vector3(
+        wp.position.x,
+        _walkSpace.eyeHeightAt(wp.position.x, wp.position.z),
+        wp.position.z,
+      ),
       targetName: wp.name,
     );
     setState(() {
@@ -2288,6 +2372,7 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     );
     _rig.eyeCenter = newPos;
     if (isFinished && arrivedName != null) {
+      _locomotion.snapBaseEyeY(_rig.eyeCenter.y);
       setState(() {
         _currentZoneName = arrivedName;
         _statusMessage = 'Llegaste a $_currentZoneName';
@@ -2379,55 +2464,94 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
         _locomotion.resetSnapTurnLatch();
       }
       if (!_hasWorldModal && (!_isRemoteConnected || !state.isNeutralized)) {
-        if (_isRemoteConnected && state.btnA) {
-          _remoteAHoldSeconds = (_remoteAHoldSeconds + frameDt).clamp(0.0, 10.0);
-        } else {
-          _remoteAHoldSeconds = 0.0;
+        final stickMoveX = _isRemoteConnected
+            ? state.stickX
+            : _gamepadMotion.moveX;
+        final stickMoveY = _isRemoteConnected
+            ? state.stickY
+            : _gamepadMotion.moveY;
+        if (_seatedSeat != null) {
+          if (stickMoveX.abs() > 0.35 || stickMoveY.abs() > 0.35) {
+            _standUpFromSeat();
+          } else {
+            final seat = _seatedSeat!;
+            final seatedGait = _locomotion.stepVerticalAndGait(
+              frameDt,
+              groundHeight: seat.groundY,
+              standingEyeHeight: seat.seatedEyeOffset,
+            );
+            _rig.eyeCenter.setValues(seat.x, seatedGait.eyeY, seat.z);
+          }
         }
-        final movingStick =
-            state.stickX.abs() > 0.12 || state.stickY.abs() > 0.12;
-        final holdATurbo = _remoteAHoldSeconds >= 0.22 && movingStick;
-        final turboHeld = _isRemoteConnected && (state.btnZL || holdATurbo);
-        _rig.eyeCenter = _locomotion.applySmoothRigLocomotion(
-          rig: _rig,
-          stickX: _isRemoteConnected ? state.stickX : _gamepadMotion.moveX,
-          stickY: _isRemoteConnected ? state.stickY : _gamepadMotion.moveY,
-          atEdge: _isRemoteConnected
-              ? state.moveAtEdge
-              : _gamepadMotion.moveAtEdge,
-          edgeTurnEnabled: _isRemoteConnected || _gamepadMotion.edgeTurnEnabled,
-          // The right control may adjust elevation while the left owns the
-          // heading. Only an explicit horizontal look overrides that turn.
-          manualLook: turnRate.abs() > 0.015,
-          turbo: turboHeld,
-          dt: frameDt,
-          speed: 1.6,
-          maxSpeed: 4.8,
-          accelerationSeconds: 2.4,
-          walkSpace: _walkSpace,
-        );
-        // Apply vertical jump physics (`ZR` Saltar) + sustained TURBO running cadence.
-        final gait = _locomotion.stepVerticalAndGait(frameDt);
-        _rig.eyeCenter.y = gait.eyeY;
-        if (gait.landed) {
-          _bindings.onSound?.call(VrHomeSound.click);
-        }
-        // The controller's image UVs and acoustic echo are not a measured
-        // viewer height. Only the visor's own pose may translate its eyes.
-        final room = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
-        if (room != null && room.title != _currentZoneName) {
-          final isDirectSpace = _expandedEcosystemRooms.any(
-            (candidate) => candidate.id == room.id,
+        if (_seatedSeat == null) {
+          if (_isRemoteConnected && state.btnA) {
+            _remoteAHoldSeconds = (_remoteAHoldSeconds + frameDt).clamp(
+              0.0,
+              10.0,
+            );
+          } else {
+            _remoteAHoldSeconds = 0.0;
+          }
+          final movingStick =
+              state.stickX.abs() > 0.12 || state.stickY.abs() > 0.12;
+          final holdATurbo = _remoteAHoldSeconds >= 0.22 && movingStick;
+          final turboHeld = _isRemoteConnected && (state.btnZL || holdATurbo);
+          _rig.eyeCenter = _locomotion.applySmoothRigLocomotion(
+            rig: _rig,
+            stickX: stickMoveX,
+            stickY: stickMoveY,
+            atEdge: _isRemoteConnected
+                ? state.moveAtEdge
+                : _gamepadMotion.moveAtEdge,
+            edgeTurnEnabled:
+                _isRemoteConnected || _gamepadMotion.edgeTurnEnabled,
+            // The right control may adjust elevation while the left owns the
+            // heading. Only an explicit horizontal look overrides that turn.
+            manualLook: turnRate.abs() > 0.015,
+            turbo: turboHeld,
+            dt: frameDt,
+            speed: 1.6,
+            maxSpeed: 4.8,
+            accelerationSeconds: 2.4,
+            walkSpace: _walkSpace,
           );
-          setState(() {
-            _currentZoneName = room.title;
-            _statusMessage = isDirectSpace
-                ? '${room.title} · Pulsa A para entrar directo a la experiencia'
-                : '${room.title} · Apunta a una exhibición y pulsa A';
-          });
+          // Apply vertical jump physics (`ZR` Saltar), smooth multi-elevation
+          // ramp/terrace tracking, and sustained TURBO running cadence.
+          final gait = _locomotion.stepVerticalAndGait(
+            frameDt,
+            groundHeight: _walkSpace.groundHeightAt(
+              _rig.eyeCenter.x,
+              _rig.eyeCenter.z,
+            ),
+          );
+          _rig.eyeCenter.y = gait.eyeY;
+          if (gait.landed) {
+            _bindings.onSound?.call(VrHomeSound.click);
+          }
+          // The controller's image UVs and acoustic echo are not a measured
+          // viewer height. Only the visor's own pose may translate its eyes.
+          final room = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
+          if (room != null && room.title != _currentZoneName) {
+            final isDirectSpace = _expandedEcosystemRooms.any(
+              (candidate) => candidate.id == room.id,
+            );
+            setState(() {
+              _currentZoneName = room.title;
+              _statusMessage = isDirectSpace
+                  ? '${room.title} · Pulsa A para entrar directo a la experiencia'
+                  : '${room.title} · Apunta a una exhibición y pulsa A';
+            });
+          }
         }
       } else {
-        final gait = _locomotion.stepVerticalAndGait(frameDt);
+        final seat = _seatedSeat;
+        final gait = _locomotion.stepVerticalAndGait(
+          frameDt,
+          groundHeight:
+              seat?.groundY ??
+              _walkSpace.groundHeightAt(_rig.eyeCenter.x, _rig.eyeCenter.z),
+          standingEyeHeight: seat?.seatedEyeOffset,
+        );
         _rig.eyeCenter.y = gait.eyeY;
       }
     }
@@ -2452,12 +2576,17 @@ class _VirtualHomeSceneState extends State<VirtualHomeScene>
     }
     // Lightweight contextual action prompt (Apple visionOS / Switch style):
     // updates a dedicated ValueNotifier with zero full-widget rebuilds.
+    _focusedSeat = !_hasWorldModal ? _findFocusedSeat() : null;
     String? nextPrompt;
     if (!_hasWorldModal && _hudHidden) {
-      if (focusedNpcNow != null) {
+      if (_seatedSeat != null) {
+        nextPrompt = 'B · Levantarse · ${_seatedSeat!.label}';
+      } else if (focusedNpcNow != null) {
         nextPrompt = 'X Voz · Y Charlar · ${focusedNpcNow.displayName}';
       } else if (_hoveredPedestal != null) {
         nextPrompt = 'A · Abrir ${_hoveredPedestal!.title}';
+      } else if (_focusedSeat != null) {
+        nextPrompt = 'A · Sentarse · ${_focusedSeat!.label}';
       } else {
         final activeRoom = _walkSpace.roomAt(_rig.eyeCenter.x, _rig.eyeCenter.z);
         if (activeRoom != null &&

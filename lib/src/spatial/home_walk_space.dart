@@ -15,7 +15,8 @@ class HomePanelPlacement {
 /// from `startElevationMeters` to `endElevationMeters`.
 enum HomeElevationAxis { posX, negX, posZ, negZ }
 
-enum _ElevationKind { terrace, ramp, radialBowl }
+/// Geometric topology of a [HomeWalkableElevation] surface.
+enum HomeWalkableElevationKind { terrace, ramp, radialBowl }
 
 /// Walkable elevation zone enabling multi-level architectural worlds (terraces,
 /// smooth ramps, arched Venetian/Japanese bridges, and sunken amphitheaters)
@@ -28,7 +29,7 @@ class HomeWalkableElevation {
     required this.maxZ,
     required double elevationMeters,
     this.id,
-  }) : _kind = _ElevationKind.terrace,
+  }) : kind = HomeWalkableElevationKind.terrace,
        startElevationMeters = elevationMeters,
        endElevationMeters = elevationMeters,
        axis = HomeElevationAxis.posZ,
@@ -49,7 +50,7 @@ class HomeWalkableElevation {
     required this.axis,
     this.archHeightMeters = 0.0,
     this.id,
-  }) : _kind = _ElevationKind.ramp,
+  }) : kind = HomeWalkableElevationKind.ramp,
        centerX = 0.0,
        centerZ = 0.0,
        innerRadius = 0.0,
@@ -64,7 +65,7 @@ class HomeWalkableElevation {
     required double centerElevationMeters,
     double rimElevationMeters = 0.0,
     this.id,
-  }) : _kind = _ElevationKind.radialBowl,
+  }) : kind = HomeWalkableElevationKind.radialBowl,
        minX = centerX - outerRadius,
        maxX = centerX + outerRadius,
        minZ = centerZ - outerRadius,
@@ -75,7 +76,7 @@ class HomeWalkableElevation {
        archHeightMeters = 0.0;
 
   final String? id;
-  final _ElevationKind _kind;
+  final HomeWalkableElevationKind kind;
   final double minX, maxX, minZ, maxZ;
   final double startElevationMeters;
   final double endElevationMeters;
@@ -87,10 +88,10 @@ class HomeWalkableElevation {
   /// `null` otherwise.
   double? sampleAt(double x, double z) {
     if (x < minX || x > maxX || z < minZ || z > maxZ) return null;
-    switch (_kind) {
-      case _ElevationKind.terrace:
+    switch (kind) {
+      case HomeWalkableElevationKind.terrace:
         return startElevationMeters;
-      case _ElevationKind.ramp:
+      case HomeWalkableElevationKind.ramp:
         final double rawT;
         switch (axis) {
           case HomeElevationAxis.posX:
@@ -112,7 +113,7 @@ class HomeWalkableElevation {
             ? math.sin(t * math.pi) * archHeightMeters
             : 0.0;
         return slopeY + archY;
-      case _ElevationKind.radialBowl:
+      case HomeWalkableElevationKind.radialBowl:
         final dx = x - centerX;
         final dz = z - centerZ;
         final dist = math.sqrt(dx * dx + dz * dz);
@@ -128,6 +129,66 @@ class HomeWalkableElevation {
         return startElevationMeters +
             (endElevationMeters - startElevationMeters) * smooth;
     }
+  }
+}
+
+/// An interactive usable bench or panoramic viewpoint seat inside a Home world.
+///
+/// Players can gaze near a seat and press `A` to sit down at a natural seated
+/// eye height facing the scenic view (`lookAtX`, `lookAtZ`), and press `B` (or
+/// push the walk stick) to stand up smoothly at `(standUpX, standUpZ)`.
+class HomeInteractiveSeat {
+  const HomeInteractiveSeat({
+    required this.id,
+    required this.label,
+    required this.x,
+    required this.z,
+    required this.lookAtX,
+    required this.lookAtZ,
+    required this.standUpX,
+    required this.standUpZ,
+    this.groundY = 0.0,
+    this.seatedEyeOffset = 1.14,
+  });
+
+  final String id;
+  final String label;
+  final double x;
+  final double z;
+  final double lookAtX;
+  final double lookAtZ;
+  final double standUpX;
+  final double standUpZ;
+  final double groundY;
+  final double seatedEyeOffset;
+
+  double get seatedEyeY => groundY + seatedEyeOffset;
+
+  /// Horizontal distance squared from [eye] to the bench center.
+  double horizontalDistanceSquared(vm.Vector3 eye) {
+    final dx = x - eye.x;
+    final dz = z - eye.z;
+    return dx * dx + dz * dz;
+  }
+
+  /// True when the viewer is close enough and looking toward this bench.
+  bool isFocusedBy(
+    vm.Vector3 eye,
+    vm.Vector3 forward, {
+    double maxDistance = 2.8,
+    double minForwardDot = 0.58,
+  }) {
+    final dx = x - eye.x;
+    final dz = z - eye.z;
+    final distSq = dx * dx + dz * dz;
+    if (!distSq.isFinite || distSq > maxDistance * maxDistance) return false;
+    if (distSq < 0.04) return true;
+    final fLen = math.sqrt(forward.x * forward.x + forward.z * forward.z);
+    if (!fLen.isFinite || fLen < 1e-4) return false;
+    final invD = 1.0 / math.sqrt(distSq);
+    final dot =
+        (dx * invD) * (forward.x / fLen) + (dz * invD) * (forward.z / fLen);
+    return dot >= minForwardDot;
   }
 }
 
@@ -148,16 +209,18 @@ class HomeWalkSpace {
            (room) =>
                PhysicsWalkRegion(room.minX, room.maxX, room.minZ, room.maxZ),
          ),
-         obstacles: boxes.map(
-           (box) => PhysicsObstacleBox(
-             x: box.x,
-             y: box.y,
-             z: box.z,
-             width: box.width,
-             height: box.height,
-             depth: box.depth,
-           ),
-         ),
+         obstacles: boxes
+             .where((box) => !box.walkable)
+             .map(
+               (box) => PhysicsObstacleBox(
+                 x: box.x,
+                 y: box.y,
+                 z: box.z,
+                 width: box.width,
+                 height: box.height,
+                 depth: box.depth,
+               ),
+             ),
        );
 
   static const double defaultStandingEyeHeight = 1.60;
@@ -167,10 +230,13 @@ class HomeWalkSpace {
   final List<HomeWalkableElevation> elevations;
   final PhysicsCharacterSpace _physics;
 
-  /// Continuous ground floor elevation (in meters) at world `(x, z)`.
-  /// Returns `0.0` everywhere when no [elevations] are authored.
-  double groundHeightAt(double x, double z) {
-    if (elevations.isEmpty || !x.isFinite || !z.isFinite) return 0.0;
+  /// Samples the continuous ground height across any [elevations] list.
+  static double sampleElevations(
+    Iterable<HomeWalkableElevation> elevations,
+    double x,
+    double z,
+  ) {
+    if (!x.isFinite || !z.isFinite) return 0.0;
     double? best;
     for (final zone in elevations) {
       final sampled = zone.sampleAt(x, z);
@@ -181,6 +247,11 @@ class HomeWalkSpace {
     }
     return best ?? 0.0;
   }
+
+  /// Continuous ground floor elevation (in meters) at world `(x, z)`.
+  /// Returns `0.0` everywhere when no [elevations] are authored.
+  double groundHeightAt(double x, double z) =>
+      elevations.isEmpty ? 0.0 : sampleElevations(elevations, x, z);
 
   /// Target VR camera eye height at world `(x, z)`.
   double eyeHeightAt(

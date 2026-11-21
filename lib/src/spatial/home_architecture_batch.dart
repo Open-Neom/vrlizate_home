@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:vrlizate_scene/vrlizate_scene.dart' show VrMeshTangents;
 
 import 'home_lobby_layout.dart';
+import 'home_walk_space.dart';
 
 /// CPU-only static batching. A room/finish remains independently culled and
 /// raycastable, while shelves and shopfront trim do not each add a draw call.
@@ -40,6 +41,32 @@ class HomeArchitectureBatch {
       mesh.add(box, defaultColor);
     }
     return mesh.finish();
+  }
+
+  /// Tessellates multi-level architectural [elevations] (terraces, smooth `C¹`
+  /// Hermite ramps, arched bridges, and circular rotunda daises) into a single
+  /// batched CPU mesh so all navigable elevation geometry renders in one GPU
+  /// draw call sharing the plaza stone PBR material and metric UVs.
+  static HomeArchitectureMeshData? buildElevationSurfaces({
+    required Iterable<HomeWalkableElevation> elevations,
+    int color = 0xFFE3DACB,
+    HomeLobbyFinish finish = HomeLobbyFinish.stone,
+    bool bakedVertexShading = false,
+    bool architecturalContactAo = false,
+  }) {
+    final list = elevations.toList(growable: false);
+    if (list.isEmpty) return null;
+    final builder = _ElevationSurfaceMeshBuilder(
+      argb: color,
+      tileMeters: finish.textureTileMeters,
+      baked: bakedVertexShading,
+      contactAo: architecturalContactAo,
+    );
+    for (final zone in list) {
+      builder.add(zone);
+    }
+    if (builder.indices.isEmpty) return null;
+    return builder.finish();
   }
 }
 
@@ -393,6 +420,293 @@ class _ArchitectureMeshBuilder {
     return value <= .04045
         ? value / 12.92
         : math.pow((value + .055) / 1.055, 2.4).toDouble();
+  }
+
+  HomeArchitectureMeshData finish() {
+    final pos = Float32List.fromList(positions);
+    final nrm = Float32List.fromList(normals);
+    final uvs = Float32List.fromList(textureCoordinates);
+    return HomeArchitectureMeshData(
+      pos,
+      nrm,
+      Float32List.fromList(colors),
+      indices,
+      uvs,
+      VrMeshTangents.compute(
+        positions: pos,
+        normals: nrm,
+        texCoords: uvs,
+        indices: indices,
+      ),
+    );
+  }
+}
+
+class _ElevationSurfaceMeshBuilder {
+  _ElevationSurfaceMeshBuilder({
+    required int argb,
+    required this.tileMeters,
+    required this.baked,
+    required this.contactAo,
+  }) : _baseColor = [
+         _ArchitectureMeshBuilder._linear((argb >> 16) & 255),
+         _ArchitectureMeshBuilder._linear((argb >> 8) & 255),
+         _ArchitectureMeshBuilder._linear(argb & 255),
+         1.0,
+       ];
+
+  final double tileMeters;
+  final bool baked;
+  final bool contactAo;
+  final List<double> _baseColor;
+
+  final positions = <double>[];
+  final normals = <double>[];
+  final colors = <double>[];
+  final textureCoordinates = <double>[];
+  final indices = <int>[];
+
+  static const int _rampSegments = 12;
+  static const int _radialAngles = 32;
+  static const int _radialRings = 6;
+
+  int _vertex(List<double> world, List<double> normal) {
+    final index = positions.length ~/ 3;
+    positions.addAll(world);
+    normals.addAll(normal);
+    final base = baked
+        ? _ArchitectureMeshBuilder._bakeColor(_baseColor, normal)
+        : _baseColor;
+    var ao = 1.0;
+    if (contactAo) {
+      // Subtle floor-crease darkening on skirt bottoms and radial edges near y = 0.
+      if (normal[1].abs() < 0.6 && world[1] < 0.45) {
+        final t = (world[1] / 0.45).clamp(0.0, 1.0);
+        final smooth = t * t * (3.0 - 2.0 * t);
+        ao *= 0.80 + 0.20 * smooth;
+      } else if (normal[1] >= 0.6 && world[1] < 0.08) {
+        ao *= 0.94 + 0.06 * (world[1] / 0.08).clamp(0.0, 1.0);
+      }
+    }
+    colors.addAll([base[0] * ao, base[1] * ao, base[2] * ao, base[3]]);
+    final uv = _ArchitectureMeshBuilder._planarUv(world, normal);
+    textureCoordinates.addAll([uv[0] / tileMeters, uv[1] / tileMeters]);
+    return index;
+  }
+
+  void _triangle(int a, int b, int c) {
+    final ia = a * 3, ib = b * 3, ic = c * 3;
+    final abx = positions[ib] - positions[ia];
+    final aby = positions[ib + 1] - positions[ia + 1];
+    final abz = positions[ib + 2] - positions[ia + 2];
+    final acx = positions[ic] - positions[ia];
+    final acy = positions[ic + 1] - positions[ia + 1];
+    final acz = positions[ic + 2] - positions[ia + 2];
+    final dot =
+        (aby * acz - abz * acy) * normals[ia] +
+        (abz * acx - abx * acz) * normals[ia + 1] +
+        (abx * acy - aby * acx) * normals[ia + 2];
+    indices.addAll(dot < 0 ? [a, c, b] : [a, b, c]);
+  }
+
+  void _quad(
+    List<double> p0,
+    List<double> p1,
+    List<double> p2,
+    List<double> p3,
+    List<double> n,
+  ) {
+    final v0 = _vertex(p0, n);
+    final v1 = _vertex(p1, n);
+    final v2 = _vertex(p2, n);
+    final v3 = _vertex(p3, n);
+    _triangle(v0, v1, v2);
+    _triangle(v0, v2, v3);
+  }
+
+  void add(HomeWalkableElevation zone) {
+    switch (zone.kind) {
+      case HomeWalkableElevationKind.terrace:
+        _addTerrace(zone);
+      case HomeWalkableElevationKind.ramp:
+        _addRamp(zone);
+      case HomeWalkableElevationKind.radialBowl:
+        _addRadialDais(zone);
+    }
+  }
+
+  void _addTerrace(HomeWalkableElevation z) {
+    final h = z.startElevationMeters;
+    if (h <= 0.004) return;
+    final x0 = z.minX, x1 = z.maxX, z0 = z.minZ, z1 = z.maxZ;
+    // Top deck
+    _quad([x0, h, z0], [x1, h, z0], [x1, h, z1], [x0, h, z1], const [0, 1, 0]);
+    // 4 solid architectural skirts down to y = 0
+    _quad(
+      [x0, 0, z0],
+      [x1, 0, z0],
+      [x1, h, z0],
+      [x0, h, z0],
+      const [0, 0, -1],
+    );
+    _quad([x1, 0, z0], [x1, 0, z1], [x1, h, z1], [x1, h, z0], const [1, 0, 0]);
+    _quad([x1, 0, z1], [x0, 0, z1], [x0, h, z1], [x1, h, z1], const [0, 0, 1]);
+    _quad(
+      [x0, 0, z1],
+      [x0, 0, z0],
+      [x0, h, z0],
+      [x0, h, z1],
+      const [-1, 0, 0],
+    );
+  }
+
+  void _addRamp(HomeWalkableElevation r) {
+    final alongX =
+        r.axis == HomeElevationAxis.posX || r.axis == HomeElevationAxis.negX;
+    final positive =
+        r.axis == HomeElevationAxis.posX || r.axis == HomeElevationAxis.posZ;
+    final length = alongX ? (r.maxX - r.minX) : (r.maxZ - r.minZ);
+    if (length <= 1e-4) return;
+
+    double evalY(double t) {
+      final smooth = t * t * (3.0 - 2.0 * t);
+      final slope =
+          r.startElevationMeters +
+          (r.endElevationMeters - r.startElevationMeters) * smooth;
+      final arch = r.archHeightMeters != 0.0
+          ? math.sin(t * math.pi) * r.archHeightMeters
+          : 0.0;
+      return math.max(0.0, slope + arch);
+    }
+
+    double evalDyDt(double t) {
+      final dSmooth = 6.0 * t * (1.0 - t);
+      final dSlope = (r.endElevationMeters - r.startElevationMeters) * dSmooth;
+      final dArch = r.archHeightMeters != 0.0
+          ? math.pi * math.cos(t * math.pi) * r.archHeightMeters
+          : 0.0;
+      return dSlope + dArch;
+    }
+
+    final topA = <int>[];
+    final topB = <int>[];
+    final slicePointsA = <List<double>>[];
+    final slicePointsB = <List<double>>[];
+    for (var i = 0; i <= _rampSegments; i++) {
+      final t = i / _rampSegments;
+      final y = evalY(t);
+      final dyDs = evalDyDt(t) / length;
+      final signedDy = positive ? dyDs : -dyDs;
+      final n = alongX
+          ? _ArchitectureMeshBuilder._normalized([-signedDy, 1.0, 0.0])
+          : _ArchitectureMeshBuilder._normalized([0.0, 1.0, -signedDy]);
+      final List<double> pA;
+      final List<double> pB;
+      if (alongX) {
+        final x = positive ? (r.minX + t * length) : (r.maxX - t * length);
+        pA = [x, y, r.minZ];
+        pB = [x, y, r.maxZ];
+      } else {
+        final z = positive ? (r.minZ + t * length) : (r.maxZ - t * length);
+        pA = [r.minX, y, z];
+        pB = [r.maxX, y, z];
+      }
+      slicePointsA.add(pA);
+      slicePointsB.add(pB);
+      topA.add(_vertex(pA, n));
+      topB.add(_vertex(pB, n));
+    }
+
+    for (var i = 0; i < _rampSegments; i++) {
+      _triangle(topA[i], topB[i], topB[i + 1]);
+      _triangle(topA[i], topB[i + 1], topA[i + 1]);
+
+      // Lateral skirts descending smoothly to y = 0.
+      final a0 = slicePointsA[i], a1 = slicePointsA[i + 1];
+      final b0 = slicePointsB[i], b1 = slicePointsB[i + 1];
+      final sideNormalA = alongX ? const [0.0, 0.0, -1.0] : const [-1.0, 0.0, 0.0];
+      final sideNormalB = alongX ? const [0.0, 0.0, 1.0] : const [1.0, 0.0, 0.0];
+      if (a0[1] > 0.002 || a1[1] > 0.002) {
+        _quad([a0[0], 0.0, a0[2]], [a1[0], 0.0, a1[2]], a1, a0, sideNormalA);
+      }
+      if (b0[1] > 0.002 || b1[1] > 0.002) {
+        _quad([b1[0], 0.0, b1[2]], [b0[0], 0.0, b0[2]], b0, b1, sideNormalB);
+      }
+    }
+
+    // End caps if either ramp terminal sits above y = 0.
+    for (final isEnd in const [false, true]) {
+      final idx = isEnd ? _rampSegments : 0;
+      final a = slicePointsA[idx];
+      final b = slicePointsB[idx];
+      if (a[1] <= 0.004) continue;
+      final dirSign = (isEnd == positive) ? 1.0 : -1.0;
+      final capNormal = alongX ? [dirSign, 0.0, 0.0] : [0.0, 0.0, dirSign];
+      _quad([a[0], 0.0, a[2]], [b[0], 0.0, b[2]], b, a, capNormal);
+    }
+  }
+
+  void _addRadialDais(HomeWalkableElevation d) {
+    final centerY = d.startElevationMeters;
+    final rimY = d.endElevationMeters;
+    if (centerY <= 0.004 && rimY <= 0.004) return;
+    final span = d.outerRadius - d.innerRadius;
+    if (d.outerRadius <= 1e-4) return;
+
+    // Flat central circular platform (0 .. innerRadius)
+    final centerIdx = _vertex(
+      [d.centerX, centerY, d.centerZ],
+      const [0.0, 1.0, 0.0],
+    );
+    final innerRing = <int>[];
+    final innerR = math.max(0.05, d.innerRadius);
+    for (var s = 0; s < _radialAngles; s++) {
+      final a = s * (math.pi * 2.0 / _radialAngles);
+      innerRing.add(
+        _vertex(
+          [d.centerX + math.cos(a) * innerR, centerY, d.centerZ + math.sin(a) * innerR],
+          const [0.0, 1.0, 0.0],
+        ),
+      );
+    }
+    for (var s = 0; s < _radialAngles; s++) {
+      final next = (s + 1) % _radialAngles;
+      _triangle(centerIdx, innerRing[next], innerRing[s]);
+    }
+
+    if (span <= 1e-4) return;
+    // Smooth concentric Hermite sloped apron (innerRadius .. outerRadius)
+    final rings = <List<int>>[];
+    for (var rStep = 0; rStep <= _radialRings; rStep++) {
+      final t = rStep / _radialRings;
+      final radius = d.innerRadius + span * t;
+      final smooth = t * t * (3.0 - 2.0 * t);
+      final y = math.max(0.0, centerY + (rimY - centerY) * smooth);
+      final dyDr = ((rimY - centerY) * 6.0 * t * (1.0 - t)) / span;
+      final ring = <int>[];
+      for (var s = 0; s < _radialAngles; s++) {
+        final a = s * (math.pi * 2.0 / _radialAngles);
+        final ca = math.cos(a);
+        final sa = math.sin(a);
+        final n = _ArchitectureMeshBuilder._normalized([-dyDr * ca, 1.0, -dyDr * sa]);
+        ring.add(
+          _vertex(
+            [d.centerX + ca * radius, y, d.centerZ + sa * radius],
+            n,
+          ),
+        );
+      }
+      rings.add(ring);
+    }
+    for (var rStep = 0; rStep < _radialRings; rStep++) {
+      final r0 = rings[rStep];
+      final r1 = rings[rStep + 1];
+      for (var s = 0; s < _radialAngles; s++) {
+        final next = (s + 1) % _radialAngles;
+        _triangle(r0[s], r0[next], r1[next]);
+        _triangle(r0[s], r1[next], r1[s]);
+      }
+    }
   }
 
   HomeArchitectureMeshData finish() {

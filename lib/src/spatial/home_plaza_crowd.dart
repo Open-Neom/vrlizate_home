@@ -10,6 +10,7 @@ import 'package:vrlizate_scene/vrlizate_scene.dart';
 
 import '../theme/vr_home_theme.dart';
 import 'home_ecosystem_layout.dart';
+import 'home_walk_space.dart';
 
 /// Pure-CPU kinematic and social state for an ambient plaza visitor so crowd
 /// motion, multi-wing exploration, NPC-to-NPC micro-conversations, storefront
@@ -385,8 +386,9 @@ final class HomePlazaCrowd {
   HomePlazaCrowd._({
     required this.visitors,
     required this.theme,
+    List<HomeWalkableElevation> elevations = const [],
     List<_NpcSocialExchange> initialExchanges = const [],
-  }) {
+  }) : elevations = List.unmodifiable(elevations) {
     _activeExchanges.addAll(initialExchanges);
     for (final ex in _activeExchanges) {
       _syncExchangeToVisitors(ex);
@@ -397,6 +399,7 @@ final class HomePlazaCrowd {
           peerId: v.id,
           appearance: v.appearance,
           x: v.x,
+          y: groundYAt(v.x, v.z),
           z: v.z,
           yaw: v.yaw,
           pose: v.pose,
@@ -925,12 +928,20 @@ final class HomePlazaCrowd {
     return HomePlazaCrowd._(
       visitors: visitors,
       theme: theme,
+      elevations: layout.elevations,
       initialExchanges: initialExchanges,
     );
   }
 
   final List<HomePlazaVisitorState> visitors;
   final VrHomeThemeData theme;
+  final List<HomeWalkableElevation> elevations;
+
+  /// Continuous ground elevation (in meters) at world `(x, z)` so roaming NPCs,
+  /// floating speech bubbles, and 3D spatial greetings ride terraces and ramps
+  /// cleanly without clipping into sloped surfaces.
+  double groundYAt(double x, double z) =>
+      elevations.isEmpty ? 0.0 : HomeWalkSpace.sampleElevations(elevations, x, z);
   final Node root = Node(name: 'home_plaza_crowd_root')
     ..raycastable = false
     ..shadowCastingMode = ShadowCastingMode.off;
@@ -1506,7 +1517,7 @@ final class HomePlazaCrowd {
         _activeBarkLabel?.node.visible = false;
         _activeBarkLabel = cached;
       }
-      final labelY = target.appearance.heightMeters + 0.44;
+      final labelY = groundYAt(target.x, target.z) + target.appearance.heightMeters + 0.44;
       cached.node.localTransform = vm.Matrix4.translationValues(
         target.x,
         labelY,
@@ -1560,7 +1571,7 @@ final class HomePlazaCrowd {
         '$header\n$comment',
         center: vm.Vector3(
           target.x,
-          target.appearance.heightMeters + 0.44,
+          groundYAt(target.x, target.z) + target.appearance.heightMeters + 0.44,
           target.z,
         ),
         height: math.min(0.40, 1.68 / bitmap.aspect),
@@ -1606,16 +1617,18 @@ final class HomePlazaCrowd {
         final v = visitors[i];
         final wasGreeting = v.greetingPlayer;
         v.step(time, aiDt, eyePosition);
+        final groundY = groundYAt(v.x, v.z);
         if (!wasGreeting &&
             v.greetingPlayer &&
             onVisitorGreeted != null &&
             time - _lastGreetingAudioTime >= 4.0) {
           _lastGreetingAudioTime = time;
-          onVisitorGreeted(vm.Vector3(v.x, 1.5, v.z));
+          onVisitorGreeted(vm.Vector3(v.x, groundY + 1.5, v.z));
         }
         peerStage.updatePeerMotion(
           v.id,
           x: v.x,
+          y: groundY,
           z: v.z,
           yaw: v.yaw,
           vx: v.vx,

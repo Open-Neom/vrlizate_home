@@ -5,6 +5,7 @@ import 'package:vrlizate_world/vrlizate_world.dart';
 import '../ecosystem/vr_home_ecosystem_room.dart';
 import 'home_lobby_layout.dart';
 import 'home_room_identity.dart';
+import 'home_walk_space.dart';
 import 'home_world_objects.dart';
 
 /// Cardinal wall placement of a storefront room relative to its plaza/wing.
@@ -119,7 +120,17 @@ class HomeEcosystemLayout {
     required Iterable<HomeEcosystemPortal> portals,
     Iterable<VrWorldEntity> worldObjects = const [],
     required Iterable<HomeLobbyWaypoint> waypoints,
-  }) => HomeEcosystemLayout._(rooms, boxes, portals, worldObjects, waypoints);
+    Iterable<HomeWalkableElevation> elevations = const [],
+    Iterable<HomeInteractiveSeat> seats = const [],
+  }) => HomeEcosystemLayout._(
+    rooms,
+    boxes,
+    portals,
+    worldObjects,
+    waypoints,
+    elevations: elevations,
+    seats: seats,
+  );
 
   factory HomeEcosystemLayout(
     Iterable<VrHomeEcosystemRoom> rooms, {
@@ -585,12 +596,28 @@ class HomeEcosystemLayout {
         roomId: 'ecosystem_corridor',
       ),
     ];
+    final seats = <HomeInteractiveSeat>[
+      for (final side in const [-1.0, 1.0])
+        HomeInteractiveSeat(
+          id: side < 0 ? 'boulevard_bench_west' : 'boulevard_bench_east',
+          label: side < 0
+              ? 'Banca Jardín del Atrio (Oeste)'
+              : 'Banca Jardín del Atrio (Este)',
+          x: side * 6.95,
+          z: firstRowZ - rowPitch / 2,
+          lookAtX: side * arcadeX,
+          lookAtZ: firstRowZ - rowPitch / 2,
+          standUpX: side * 7.95,
+          standUpZ: firstRowZ - rowPitch / 2,
+        ),
+    ];
     return HomeEcosystemLayout._(
       spaces,
       boxes,
       portals,
       objects.entities,
       waypoints,
+      seats: seats,
     );
   }
 
@@ -1834,6 +1861,7 @@ class HomeEcosystemLayout {
       HomeLobbyFinish finish = HomeLobbyFinish.plaster,
       int? color,
       HomeLobbyShape shape = HomeLobbyShape.cuboid,
+      bool walkable = false,
     ]) {
       boxes.add(
         HomeLobbyBox(
@@ -1848,6 +1876,7 @@ class HomeEcosystemLayout {
           shape: shape,
           color: color,
           zone: 'promenade',
+          walkable: walkable,
         ),
       );
     }
@@ -1951,56 +1980,227 @@ class HomeEcosystemLayout {
       }
     }
 
-    // Central Octagonal Compass Medallion at (0, 36.0) — walkable zero-height inlay.
+    // Croquis 1 — Rotonda Circular Central (+0.36 m sculpted radial dais) with
+    // walkable inlaid bronze compass medallion resting cleanly atop the dais
+    // and 4 fluted travertine columns carrying the overhead pergola crown ring.
+    const rotundaHeight = 0.36;
     pBox(
       'cruciform_compass_outer',
       0,
-      .007,
+      rotundaHeight + .007,
       cruciformCenterZ,
-      9.4,
+      8.8,
       .014,
-      9.4,
+      8.8,
       HomeLobbyFinish.trim,
       0xFFB59A72,
       HomeLobbyShape.cylinder,
+      true,
     );
     pBox(
       'cruciform_compass_inner',
       0,
-      .013,
+      rotundaHeight + .013,
       cruciformCenterZ,
-      6.2,
+      5.8,
       .014,
-      6.2,
+      5.8,
       HomeLobbyFinish.stone,
       0xFFF2ECE1,
       HomeLobbyShape.cylinder,
+      true,
     );
     pBox(
       'cruciform_compass_star',
       0,
-      .019,
+      rotundaHeight + .019,
       cruciformCenterZ,
-      2.4,
+      2.2,
       .014,
-      2.4,
+      2.2,
       HomeLobbyFinish.trim,
       0xFF0D9488,
       HomeLobbyShape.cylinder,
+      true,
     );
-    // Overhead Cupola Crown Ring above the Central Crossroads (0, 36.0).
+    // Overhead Cupola Crown Ring above the Central Crossroads (0, 36.0),
+    // structurally supported by 4 diagonal fluted travertine colonnade piers
+    // placed cleanly outside all 5 N-S and 3 E-W grand sprint avenues.
     pBox(
       'cruciform_dome_ring',
       0,
       8.1,
       cruciformCenterZ,
-      16.0,
+      21.4,
       .38,
-      16.0,
+      21.4,
       HomeLobbyFinish.oak,
       0xFFC9A66B,
       HomeLobbyShape.cylinder,
     );
+    for (final sx in const [-1.0, 1.0]) {
+      for (final sz in const [-1.0, 1.0]) {
+        final cx = sx * 9.4;
+        final cz = cruciformCenterZ + sz * 7.8;
+        pBox(
+          'rotunda_col_plinth_${sx}_$sz',
+          cx,
+          .12,
+          cz,
+          .82,
+          .24,
+          .82,
+          HomeLobbyFinish.trim,
+          0xFF9F8866,
+          HomeLobbyShape.beveledBox,
+        );
+        pBox(
+          'rotunda_col_shaft_${sx}_$sz',
+          cx,
+          4.04,
+          cz,
+          .54,
+          7.60,
+          .54,
+          HomeLobbyFinish.stone,
+          0xFFE8E0D1,
+          HomeLobbyShape.cylinder,
+        );
+        pBox(
+          'rotunda_col_capital_${sx}_$sz',
+          cx,
+          7.86,
+          cz,
+          .88,
+          .26,
+          .88,
+          HomeLobbyFinish.trim,
+          0xFFB8996B,
+          HomeLobbyShape.beveledBox,
+        );
+      }
+    }
+
+    // Croquis 1 — Arrival Courtyard Reflecting-Pool Benches nestled at x = ±5.55
+    // (1.3+ m clear of both x = ±3.5 and x = ±7.5 grand N-S sprint avenues),
+    // facing inward toward the reflecting water mirror at z = 17.5.
+    for (final side in const [-1.0, 1.0]) {
+      final bx = side * 5.55;
+      pBox(
+        'water_court_bench_seat_$side',
+        bx,
+        .44,
+        17.5,
+        .70,
+        .14,
+        2.60,
+        HomeLobbyFinish.oak,
+        0xFFAF8A62,
+        HomeLobbyShape.beveledBox,
+      );
+      pBox(
+        'water_court_bench_back_$side',
+        bx + side * .31,
+        .84,
+        17.5,
+        .12,
+        .70,
+        2.60,
+        HomeLobbyFinish.oak,
+        0xFFAF8A62,
+        HomeLobbyShape.beveledBox,
+      );
+      for (final dir in const [-1.0, 1.0]) {
+        pBox(
+          'water_court_bench_foot_${side}_$dir',
+          bx,
+          .20,
+          17.5 + dir * .96,
+          .52,
+          .40,
+          .14,
+          HomeLobbyFinish.trim,
+          0xFF756D61,
+        );
+      }
+    }
+
+    // Croquis 1 — Sweeping Full-Width Mirador Belvedere Sur (+0.95 m elevated
+    // panoramic terrace at x in [-8.4, 8.4], z in [53.2, 60.4]) with sunlit oak
+    // pergola canopy supported at x = ±8.85 (clear of all sprint avenues) and
+    // twin panoramic lounge benches facing the Grand Crucero & open HDR sky.
+    const belvedereY = 0.95;
+    for (final sx in const [-1.0, 1.0]) {
+      for (final cz in const [53.60, 60.00]) {
+        pBox(
+          'belvedere_post_${sx}_$cz',
+          sx * 8.85,
+          belvedereY + 1.85,
+          cz,
+          .24,
+          3.70,
+          .24,
+          HomeLobbyFinish.trim,
+          0xFF8A7559,
+          HomeLobbyShape.cylinder,
+        );
+      }
+    }
+    for (var i = 0; i < 5; i++) {
+      pBox(
+        'belvedere_pergola_beam_$i',
+        0,
+        belvedereY + 3.74,
+        53.6 + i * 1.60,
+        18.2,
+        .18,
+        .20,
+        HomeLobbyFinish.oak,
+        0xFFB58E60,
+      );
+    }
+    // Twin Panoramic Belvedere Overlook Benches placed cleanly at x = ±5.60
+    // (1.3+ m clear of both x = ±3.5 and x = ±7.5 sprint lanes) atop +0.95 m.
+    for (final side in const [-1.0, 1.0]) {
+      final bx = side * 5.60;
+      pBox(
+        'belvedere_bench_seat_$side',
+        bx,
+        belvedereY + .42,
+        56.8,
+        .70,
+        .14,
+        3.0,
+        HomeLobbyFinish.oak,
+        0xFFB58E60,
+        HomeLobbyShape.beveledBox,
+      );
+      pBox(
+        'belvedere_bench_back_$side',
+        bx + side * .31,
+        belvedereY + .82,
+        56.8,
+        .12,
+        .68,
+        3.0,
+        HomeLobbyFinish.oak,
+        0xFFB58E60,
+        HomeLobbyShape.beveledBox,
+      );
+      for (final dir in const [-1.0, 1.0]) {
+        pBox(
+          'belvedere_bench_foot_${side}_$dir',
+          bx,
+          belvedereY + .19,
+          56.8 + dir * 1.12,
+          .52,
+          .38,
+          .14,
+          HomeLobbyFinish.trim,
+          0xFF756D61,
+        );
+      }
+    }
     for (final z in const [18.0, 27.5, 45.0, 56.5]) {
       pBox(
         'atrium_beam_$z',
@@ -2303,10 +2503,115 @@ class HomeEcosystemLayout {
         ),
       const HomeLobbyWaypoint(
         'mall_rotunda',
-        'Atrio Sur · Portal OpenWorld',
+        'Mirador Belvedere Sur (+0.95 m)',
         0,
         56.5,
         roomId: 'ecosystem_corridor',
+      ),
+    ];
+
+    const elevations = <HomeWalkableElevation>[
+      HomeWalkableElevation.radialBowl(
+        id: 'cruciform_rotunda_dais',
+        centerX: 0,
+        centerZ: cruciformCenterZ,
+        innerRadius: 4.8,
+        outerRadius: 8.2,
+        centerElevationMeters: rotundaHeight,
+        rimElevationMeters: 0.0,
+      ),
+      HomeWalkableElevation.terrace(
+        id: 'belvedere_south_terrace',
+        minX: -8.4,
+        maxX: 8.4,
+        minZ: 53.2,
+        maxZ: 60.4,
+        elevationMeters: belvedereY,
+      ),
+      HomeWalkableElevation.ramp(
+        id: 'belvedere_ramp_north',
+        minX: -8.4,
+        maxX: 8.4,
+        minZ: 47.2,
+        maxZ: 53.2,
+        startElevationMeters: 0.0,
+        endElevationMeters: belvedereY,
+        axis: HomeElevationAxis.posZ,
+      ),
+      HomeWalkableElevation.ramp(
+        id: 'belvedere_ramp_south',
+        minX: -8.4,
+        maxX: 8.4,
+        minZ: 60.4,
+        maxZ: 63.4,
+        startElevationMeters: belvedereY,
+        endElevationMeters: 0.0,
+        axis: HomeElevationAxis.posZ,
+      ),
+      HomeWalkableElevation.ramp(
+        id: 'belvedere_ramp_west',
+        minX: -11.4,
+        maxX: -8.4,
+        minZ: 54.4,
+        maxZ: 59.2,
+        startElevationMeters: 0.0,
+        endElevationMeters: belvedereY,
+        axis: HomeElevationAxis.posX,
+      ),
+      HomeWalkableElevation.ramp(
+        id: 'belvedere_ramp_east',
+        minX: 8.4,
+        maxX: 11.4,
+        minZ: 54.4,
+        maxZ: 59.2,
+        startElevationMeters: belvedereY,
+        endElevationMeters: 0.0,
+        axis: HomeElevationAxis.posX,
+      ),
+    ];
+
+    const seats = <HomeInteractiveSeat>[
+      HomeInteractiveSeat(
+        id: 'arrival_water_west',
+        label: 'Banca del Espejo de Agua (Oeste)',
+        x: -5.55,
+        z: 17.5,
+        lookAtX: 0.0,
+        lookAtZ: 17.5,
+        standUpX: -4.50,
+        standUpZ: 17.5,
+      ),
+      HomeInteractiveSeat(
+        id: 'arrival_water_east',
+        label: 'Banca del Espejo de Agua (Este)',
+        x: 5.55,
+        z: 17.5,
+        lookAtX: 0.0,
+        lookAtZ: 17.5,
+        standUpX: 4.50,
+        standUpZ: 17.5,
+      ),
+      HomeInteractiveSeat(
+        id: 'belvedere_overlook_west',
+        label: 'Mirador Belvedere Oeste (+0.95 m)',
+        x: -5.60,
+        z: 56.8,
+        lookAtX: 0.0,
+        lookAtZ: 36.0,
+        standUpX: -4.55,
+        standUpZ: 56.8,
+        groundY: belvedereY,
+      ),
+      HomeInteractiveSeat(
+        id: 'belvedere_overlook_east',
+        label: 'Mirador Belvedere Este (+0.95 m)',
+        x: 5.60,
+        z: 56.8,
+        lookAtX: 0.0,
+        lookAtZ: 36.0,
+        standUpX: 4.55,
+        standUpZ: 56.8,
+        groundY: belvedereY,
       ),
     ];
 
@@ -2316,6 +2621,8 @@ class HomeEcosystemLayout {
       portals,
       objects.entities,
       waypoints,
+      elevations: elevations,
+      seats: seats,
     );
   }
 
@@ -2324,16 +2631,22 @@ class HomeEcosystemLayout {
     Iterable<HomeLobbyBox> boxes,
     Iterable<HomeEcosystemPortal> portals,
     Iterable<VrWorldEntity> worldObjects,
-    Iterable<HomeLobbyWaypoint> waypoints,
-  ) : rooms = List.unmodifiable(rooms),
-      boxes = List.unmodifiable(boxes),
-      portals = List.unmodifiable(portals),
-      worldObjects = List.unmodifiable(worldObjects),
-      waypoints = List.unmodifiable(waypoints);
+    Iterable<HomeLobbyWaypoint> waypoints, {
+    Iterable<HomeWalkableElevation> elevations = const [],
+    Iterable<HomeInteractiveSeat> seats = const [],
+  }) : rooms = List.unmodifiable(rooms),
+       boxes = List.unmodifiable(boxes),
+       portals = List.unmodifiable(portals),
+       worldObjects = List.unmodifiable(worldObjects),
+       waypoints = List.unmodifiable(waypoints),
+       elevations = List.unmodifiable(elevations),
+       seats = List.unmodifiable(seats);
 
   final List<HomeRoom> rooms;
   final List<HomeLobbyBox> boxes;
   final List<HomeEcosystemPortal> portals;
   final List<VrWorldEntity> worldObjects;
   final List<HomeLobbyWaypoint> waypoints;
+  final List<HomeWalkableElevation> elevations;
+  final List<HomeInteractiveSeat> seats;
 }

@@ -31,6 +31,12 @@ class HomeLobbyBox {
 
   /// Static meshes are batched within this spatial zone, retaining room culling.
   final String zone;
+
+  /// When `true`, this architectural surface (e.g. elevated terrace inlay,
+  /// medallion, or low walkable pad) renders normally in [HomeArchitectureBatch]
+  /// without blocking character movement in [HomeWalkSpace].
+  final bool walkable;
+
   const HomeLobbyBox(
     this.name, {
     required this.x,
@@ -43,6 +49,7 @@ class HomeLobbyBox {
     this.shape = HomeLobbyShape.cuboid,
     this.color,
     this.zone = 'lobby',
+    this.walkable = false,
   });
 }
 

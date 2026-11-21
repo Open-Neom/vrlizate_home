@@ -68,9 +68,18 @@ class VirtualHomeLocomotionController {
   double _runBlend = 0;
   double _gaitPhase = 0;
   double _lastGaitSin = 0;
+  double _smoothedBaseEyeY = baseEyeHeight;
   final vm.Vector3 _lastMoveDirection = vm.Vector3.zero();
   final VrStickEdgeTurn _edgeTurn = VrStickEdgeTurn();
   bool _snapTurnArmed = true;
+
+  /// Snaps the vertical elevation follower directly to [eyeY] after a teleport,
+  /// spawn, or layout rebuild so gait starts cleanly at the new terrace height.
+  void snapBaseEyeY(double eyeY) {
+    if (eyeY.isFinite) {
+      _smoothedBaseEyeY = eyeY;
+    }
+  }
 
   /// Re-arms the discrete horizontal snap-turn latch (called when stick centers
   /// or user leaves a modal).
@@ -156,23 +165,37 @@ class VirtualHomeLocomotionController {
     return true;
   }
 
-  /// Advances vertical jump physics and natural running stride cadence for [dt].
+  /// Advances vertical jump physics, multi-elevation camera smoothing, and
+  /// natural running stride cadence for [dt].
   ///
   /// Returns:
-  /// - `eyeY`: target camera eye height in meters (`baseEyeHeight + hop + gait bob`).
+  /// - `eyeY`: target camera eye height in meters (`smoothedBaseEyeY + hop + gait bob`).
   /// - `landed`: `true` on the frame the player touches down from a jump.
   /// - `footstepPulse`: `true` on rhythmic foot-strikes while running.
   ({double eyeY, bool landed, bool footstepPulse}) stepVerticalAndGait(
-    double dt,
-  ) {
+    double dt, {
+    double groundHeight = 0.0,
+    double? standingEyeHeight,
+  }) {
+    final safeGround = groundHeight.isFinite ? groundHeight : 0.0;
+    final targetEyeOffset =
+        (standingEyeHeight != null && standingEyeHeight.isFinite)
+        ? standingEyeHeight
+        : baseEyeHeight;
     if (!dt.isFinite || dt <= 0) {
       return (
-        eyeY: baseEyeHeight + _hopOffsetY,
+        eyeY: _smoothedBaseEyeY + _hopOffsetY,
         landed: false,
         footstepPulse: false,
       );
     }
     final step = min(dt, 0.1);
+    _smoothedBaseEyeY = smoothVerticalEyeFollow(
+      currentY: _smoothedBaseEyeY,
+      targetGroundY: safeGround,
+      dt: step,
+      standingEyeHeight: targetEyeOffset,
+    );
     var landed = false;
     if (_hopAirborne || _hopOffsetY > 0) {
       _hopOffsetY += _hopVelocityY * step;
@@ -234,7 +257,7 @@ class VirtualHomeLocomotionController {
     }
 
     return (
-      eyeY: baseEyeHeight + _hopOffsetY + bobY,
+      eyeY: _smoothedBaseEyeY + _hopOffsetY + bobY,
       landed: landed,
       footstepPulse: footstepPulse,
     );
@@ -681,7 +704,7 @@ class VirtualHomeLocomotionController {
   }) {
     vm.Vector3? nearestStandable(double tx, double tz) {
       if (walkSpace.canStand(tx, tz)) {
-        return vm.Vector3(tx, 1.60, tz);
+        return vm.Vector3(tx, walkSpace.eyeHeightAt(tx, tz), tz);
       }
       for (final radius in const [
         0.35,
@@ -843,7 +866,10 @@ class VirtualHomeLocomotionController {
       return (
         destination: vm.Vector3(
           hoveredWaypoint.position.x,
-          1.60,
+          walkSpace.eyeHeightAt(
+            hoveredWaypoint.position.x,
+            hoveredWaypoint.position.z,
+          ),
           hoveredWaypoint.position.z,
         ),
         targetName: hoveredWaypoint.name,
@@ -896,7 +922,11 @@ class VirtualHomeLocomotionController {
     }
 
     return (
-      destination: vm.Vector3(marchPos.x, 1.60, marchPos.z),
+      destination: vm.Vector3(
+        marchPos.x,
+        walkSpace.eyeHeightAt(marchPos.x, marchPos.z),
+        marchPos.z,
+      ),
       targetName: 'punto mirado (${movedMeters.toStringAsFixed(1)} m)',
       statusMessage:
           'Yendo al punto frente a tu mirada (${movedMeters.toStringAsFixed(1)} m)...',

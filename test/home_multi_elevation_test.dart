@@ -1,8 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math.dart' as vm;
+import 'package:vrlizate_home/src/spatial/home_architecture_batch.dart';
 import 'package:vrlizate_home/vrlizate_home_spatial.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('Multi-elevation walkability (terraces, arched bridges, sunken bowls)', () {
     test('flat default HomeWalkSpace preserves y=0 and 1.60m eye height', () {
       final flat = HomeWalkSpace();
@@ -120,5 +125,122 @@ void main() {
       expect(damped, greaterThan(1.60));
       expect(damped, lessThan(2.00));
     });
+
+    test(
+      'Croquis 1 distributedCruciform Pavilion: walkable Rotonda (+0.36m), sweeping Belvedere (+0.95m) via 4 ramps, batched mesh, NPCs, and 4 interactive seats',
+      () {
+        final layout = HomeEcosystemLayout(
+          VrHomeEcosystemRoom.defaults,
+          topology: HomePlazaTopology.distributedCruciform,
+        );
+        expect(layout.elevations, hasLength(6));
+        expect(layout.seats, hasLength(4));
+
+        final space = HomeWalkSpace(
+          rooms: layout.rooms,
+          boxes: layout.boxes,
+          elevations: layout.elevations,
+        );
+
+        // 1. Walk continuously from Lobby (0, 0) -> Water Court (0, 17.5) ->
+        //    Rotonda Circular Central (0, 36.0) -> North Ramp -> Belvedere (0, 56.5).
+        var pos = vm.Vector3(0, 1.60, 0);
+        for (var i = 0; i < 565; i++) {
+          pos = space.move(pos, 0, 0.1);
+          expect(space.canStand(pos.x, pos.z), isTrue, reason: 'step $i at z=${pos.z}');
+        }
+        expect(pos.z, closeTo(56.5, 1e-3));
+        expect(space.groundHeightAt(0, 17.5), closeTo(0.0, 1e-6));
+        expect(space.groundHeightAt(0, 36.0), closeTo(0.36, 1e-6));
+        expect(space.groundHeightAt(0, 50.2), closeTo(0.475, 1e-4));
+        expect(space.groundHeightAt(0, 56.5), closeTo(0.95, 1e-6));
+        expect(pos.y, closeTo(2.55, 1e-4));
+
+        // 2. Climb via West and East architectural ramps onto Belvedere (+0.95 m)
+        //    and descend smoothly via the South ramp back to ground level (0.0 m).
+        var westPos = vm.Vector3(-12.0, 1.60, 56.8);
+        for (var i = 0; i < 45; i++) {
+          westPos = space.move(westPos, 0.1, 0);
+          expect(space.canStand(westPos.x, westPos.z), isTrue);
+        }
+        expect(westPos.x, closeTo(-7.5, 1e-3));
+        expect(westPos.y, closeTo(2.55, 1e-4));
+
+        var eastPos = vm.Vector3(12.0, 1.60, 56.8);
+        for (var i = 0; i < 45; i++) {
+          eastPos = space.move(eastPos, -0.1, 0);
+          expect(space.canStand(eastPos.x, eastPos.z), isTrue);
+        }
+        expect(eastPos.x, closeTo(7.5, 1e-3));
+        expect(eastPos.y, closeTo(2.55, 1e-4));
+        expect(space.groundHeightAt(0, 61.9), closeTo(0.475, 1e-4));
+        expect(space.groundHeightAt(0, 63.6), closeTo(0.0, 1e-6));
+
+        // 3. Structural Belvedere corner columns remain solid obstacles.
+        expect(space.canStand(8.85, 53.60), isFalse);
+
+        // 4. Every interactive bench has a valid stand-up point & focus check.
+        for (final seat in layout.seats) {
+          expect(
+            space.canStand(seat.standUpX, seat.standUpZ),
+            isTrue,
+            reason: 'seat ${seat.id} standUp must be walkable',
+          );
+          final viewerEye = vm.Vector3(
+            seat.standUpX,
+            space.eyeHeightAt(seat.standUpX, seat.standUpZ),
+            seat.standUpZ,
+          );
+          final toSeat = vm.Vector3(
+            seat.x - viewerEye.x,
+            0,
+            seat.z - viewerEye.z,
+          )..normalize();
+          expect(seat.isFocusedBy(viewerEye, toSeat), isTrue);
+          expect(seat.isFocusedBy(viewerEye, -toSeat), isFalse);
+        }
+
+        // 5. Batched elevation surface mesh compiles cleanly in 1 mesh with unit normals.
+        final mesh = HomeArchitectureBatch.buildElevationSurfaces(
+          elevations: layout.elevations,
+          architecturalContactAo: true,
+        );
+        expect(mesh, isNotNull);
+        expect(mesh!.indices.length, greaterThan(200));
+        expect(mesh.indices.length % 3, 0);
+        for (var i = 0; i < mesh.normals.length; i += 3) {
+          final len = math.sqrt(
+            mesh.normals[i] * mesh.normals[i] +
+                mesh.normals[i + 1] * mesh.normals[i + 1] +
+                mesh.normals[i + 2] * mesh.normals[i + 2],
+          );
+          expect(len, closeTo(1.0, 1e-3));
+        }
+
+        // 6. Locomotion gait tracks elevated terrace and seated eye offsets smoothly.
+        final ctrl = VirtualHomeLocomotionController();
+        var gaitY = 1.60;
+        for (var f = 0; f < 45; f++) {
+          gaitY = ctrl.stepVerticalAndGait(1 / 60, groundHeight: 0.95).eyeY;
+        }
+        expect(gaitY, closeTo(2.55, 0.02));
+        for (var f = 0; f < 45; f++) {
+          gaitY = ctrl
+              .stepVerticalAndGait(
+                1 / 60,
+                groundHeight: 0.95,
+                standingEyeHeight: 1.14,
+              )
+              .eyeY;
+        }
+        expect(gaitY, closeTo(2.09, 0.02));
+
+        // 7. Ambient NPC crowd samples exact elevation across Rotonda & Belvedere.
+        final crowd = HomePlazaCrowd.plan(layout: layout);
+        expect(crowd.groundYAt(0, 36.0), closeTo(0.36, 1e-6));
+        expect(crowd.groundYAt(0, 56.5), closeTo(0.95, 1e-6));
+        crowd.dispose();
+      },
+    );
   });
 }
